@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# SQLite databases (analysis records are local artifacts, not source)
+backend/*.db
+
+# Node / Next.js
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+
+# Misc
+.DS_Store
+*.log

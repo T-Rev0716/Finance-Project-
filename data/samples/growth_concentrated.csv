@@ -1,0 +1,8 @@
+ticker,security_name,asset_class,sector,shares,market_value,cost_basis,account_type,risk_tolerance,client_goal
+NVDA,NVIDIA Corp,Equity,Technology,120,21600.00,9600.00,Taxable,Moderate,Growth
+MSFT,Microsoft Corp,Equity,Technology,40,17400.00,12000.00,Taxable,Moderate,Growth
+AAPL,Apple Inc,Equity,Technology,50,11500.00,7500.00,Roth IRA,Moderate,Growth
+PYPL,PayPal Holdings Inc,Equity,Financial Services,60,4200.00,6000.00,Taxable,Moderate,Growth
+VOO,Vanguard S&P 500 ETF,Equity,Diversified,30,16500.00,13500.00,Roth IRA,Moderate,Growth
+AGG,iShares Core US Aggregate Bond ETF,Fixed Income,Bond,120,12000.00,12400.00,Roth IRA,Moderate,Growth
+SWVXX,Schwab Value Advantage Money Fund,Cash,Cash,6800,6800.00,6800.00,Taxable,Moderate,Growth

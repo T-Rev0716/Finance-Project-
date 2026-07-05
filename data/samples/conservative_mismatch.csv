@@ -1,0 +1,10 @@
+ticker,security_name,asset_class,sector,shares,market_value,cost_basis,account_type,risk_tolerance,client_goal
+VTI,Vanguard Total Stock Market ETF,Equity,Diversified,125,37500.00,30000.00,Taxable,Conservative,Capital Preservation
+JNJ,Johnson & Johnson,Equity,Healthcare,200,30000.00,26000.00,Taxable,Conservative,Capital Preservation
+JPM,JPMorgan Chase & Co,Equity,Financial Services,130,32500.00,24000.00,Taxable,Conservative,Capital Preservation
+XOM,Exxon Mobil Corp,Equity,Energy,250,25000.00,27500.00,Taxable,Conservative,Capital Preservation
+MSFT,Microsoft Corp,Equity,Technology,70,35000.00,20000.00,Traditional IRA,Conservative,Capital Preservation
+VXUS,Vanguard Total International Stock ETF,Equity,Diversified International,250,15000.00,16000.00,Traditional IRA,Conservative,Capital Preservation
+BND,Vanguard Total Bond Market ETF,Fixed Income,Bond,410,30000.00,30500.00,Traditional IRA,Conservative,Capital Preservation
+VCIT,Vanguard Interm-Term Corp Bond ETF,Fixed Income,Corporate Bond,305,25000.00,25500.00,Traditional IRA,Conservative,Capital Preservation
+SPAXX,Fidelity Government Money Market Fund,Cash,Cash,20000,20000.00,20000.00,Taxable,Conservative,Capital Preservation

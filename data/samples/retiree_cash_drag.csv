@@ -1,0 +1,9 @@
+ticker,security_name,asset_class,sector,shares,market_value,cost_basis,account_type,risk_tolerance,client_goal
+VMFXX,Vanguard Federal Money Market Fund,Cash,Cash,72000,72000.00,72000.00,Traditional IRA,Conservative,Retirement Income
+BND,Vanguard Total Bond Market ETF,Fixed Income,Bond,950,70000.00,75000.00,Traditional IRA,Conservative,Retirement Income
+TIP,iShares TIPS Bond ETF,Fixed Income,Bond,410,45000.00,43000.00,Traditional IRA,Conservative,Retirement Income
+VYM,Vanguard High Dividend Yield ETF,Equity,Diversified,460,60000.00,45000.00,Taxable,Conservative,Retirement Income
+SCHD,Schwab US Dividend Equity ETF,Equity,Diversified,1450,40000.00,32000.00,Taxable,Conservative,Retirement Income
+DUK,Duke Energy Corp,Equity,Utilities,250,30000.00,24000.00,Traditional IRA,Conservative,Retirement Income
+KO,Coca-Cola Co,Equity,Consumer Staples,800,48000.00,38000.00,Taxable,Conservative,Retirement Income
+O,Realty Income Corp,Equity,Real Estate,610,35000.00,30000.00,Traditional IRA,Conservative,Retirement Income
