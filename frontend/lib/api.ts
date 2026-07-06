@@ -88,13 +88,29 @@ export interface BriefSections {
   compliance_disclaimer: string;
 }
 
+export interface GeneratorMetadata {
+  requested_generator?: string;
+  provider?: string | null;
+  model?: string | null;
+  prompt_version?: string | null;
+  validation_status?: string;
+  fallback_reason?: string | null;
+}
+
 export interface Brief {
   analysis_id: number;
   source_name: string;
   generator: string;
+  generator_metadata?: GeneratorMetadata;
   engine_version: string;
   generated_at: string;
   sections: BriefSections;
+}
+
+export interface GeneratorInfo {
+  default_brief_generator: string;
+  llm_configured: boolean;
+  llm_model: string | null;
 }
 
 export const FALLBACK_DISCLAIMER =
@@ -154,6 +170,24 @@ export async function getBrief(analysisId: number): Promise<Brief> {
   const res = await fetch(`${API_BASE}/analyses/${analysisId}/brief`);
   if (!res.ok) throw new Error(`Failed to generate brief (${res.status})`);
   return res.json();
+}
+
+export async function regenerateBrief(analysisId: number, generator?: string): Promise<Brief> {
+  const query = generator ? `?generator=${encodeURIComponent(generator)}` : "";
+  const res = await fetch(`${API_BASE}/analyses/${analysisId}/brief${query}`, { method: "POST" });
+  if (!res.ok) throw new Error(`Failed to generate brief (${res.status})`);
+  return res.json();
+}
+
+export async function fetchGeneratorInfo(): Promise<GeneratorInfo> {
+  const res = await fetch(`${API_BASE}/health`);
+  if (!res.ok) throw new Error(`Failed to load generator info (${res.status})`);
+  const body = await res.json();
+  return {
+    default_brief_generator: body.default_brief_generator ?? "deterministic-v1",
+    llm_configured: Boolean(body.llm_configured),
+    llm_model: body.llm_model ?? null,
+  };
 }
 
 export function briefExportUrl(analysisId: number, format: "markdown" | "html" | "pdf"): string {

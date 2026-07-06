@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-import { Brief, briefExportUrl, formatMoney, getBrief } from "@/lib/api";
+import {
+  Brief,
+  GeneratorInfo,
+  briefExportUrl,
+  formatMoney,
+  getBrief,
+  regenerateBrief,
+} from "@/lib/api";
+
+const FALLBACK_GENERATOR = "deterministic-fallback-after-llm-failure";
 
 const SEVERITY_TEXT: Record<string, string> = {
   high: "text-red-700",
@@ -19,25 +28,35 @@ const SEVERITY_BORDER: Record<string, string> = {
 export default function BriefView({
   analysisId,
   autoLoadToken,
+  generatorInfo,
 }: {
   analysisId: number;
   /** Changing this value (e.g. from a "View Brief" click) triggers an automatic load. */
   autoLoadToken?: number;
+  generatorInfo?: GeneratorInfo | null;
 }) {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  async function run(action: () => Promise<Brief>) {
     setLoading(true);
     setError(null);
     try {
-      setBrief(await getBrief(analysisId));
+      setBrief(await action());
     } catch (e) {
       setError(e instanceof Error ? e.message : "Brief generation failed.");
     } finally {
       setLoading(false);
     }
+  }
+
+  function load() {
+    return run(() => getBrief(analysisId));
+  }
+
+  function generateWithLlm() {
+    return run(() => regenerateBrief(analysisId, "llm-v1"));
   }
 
   useEffect(() => {
@@ -62,6 +81,16 @@ export default function BriefView({
               {loading ? "Generating…" : "Generate / View Brief"}
             </button>
           )}
+          {generatorInfo?.llm_configured &&
+            (!brief || brief.generator === "deterministic-v1") && (
+              <button
+                onClick={generateWithLlm}
+                disabled={loading}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100 disabled:opacity-50"
+              >
+                {brief ? "Regenerate with LLM" : "Generate with LLM"}
+              </button>
+            )}
           {brief && (
             <>
               <a
@@ -97,8 +126,17 @@ export default function BriefView({
 
       {!brief && !error && (
         <p className="mt-3 text-sm text-slate-500">
-          Generates a deterministic, advisor-presentable brief grounded in this analysis&apos;s
-          data and rule evidence. Nothing is invented; every review item maps to a rule ID.
+          Generates an advisor-presentable brief grounded in this analysis&apos;s data and rule
+          evidence. Nothing is invented; every review item maps to a rule ID.{" "}
+          {generatorInfo?.llm_configured ? (
+            <span>
+              Deterministic generation is the default; an LLM language generator
+              {generatorInfo.llm_model ? ` (${generatorInfo.llm_model})` : ""} is available and
+              falls back to deterministic output if its draft fails validation.
+            </span>
+          ) : (
+            <span>Deterministic generator active — no LLM is configured.</span>
+          )}
         </p>
       )}
 
@@ -109,8 +147,15 @@ export default function BriefView({
 
 function BriefBody({ brief }: { brief: Brief }) {
   const s = brief.sections;
+  const model = brief.generator_metadata?.model;
   return (
     <div className="mt-5 space-y-6 text-sm">
+      {brief.generator === FALLBACK_GENERATOR && (
+        <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Generated with deterministic fallback — the LLM draft was unavailable or did not pass
+          validation, so the rule-based brief is shown instead.
+        </p>
+      )}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-4">
         <div>
           <dt className="font-semibold text-slate-700">Analysis ID</dt>
@@ -126,8 +171,9 @@ function BriefBody({ brief }: { brief: Brief }) {
         </div>
         <div>
           <dt className="font-semibold text-slate-700">Engine version</dt>
-          <dd>
-            {brief.engine_version} ({brief.generator})
+          <dd className="truncate">
+            {brief.engine_version} ({brief.generator}
+            {brief.generator === "llm-v1" && model ? ` · ${model}` : ""})
           </dd>
         </div>
       </dl>

@@ -8,8 +8,10 @@ import {
   AllocationItem,
   AnalysisResult,
   Flag,
+  GeneratorInfo,
   analyzeSample,
   analyzeUpload,
+  fetchGeneratorInfo,
   fetchSamples,
   formatMoney,
   getAnalysis,
@@ -28,6 +30,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"analyze" | "history">("analyze");
   const [briefRequest, setBriefRequest] = useState<{ id: number; token: number } | null>(null);
+  const [generatorInfo, setGeneratorInfo] = useState<GeneratorInfo | null>(null);
 
   useEffect(() => {
     fetchSamples()
@@ -35,6 +38,9 @@ export default function Home() {
       .catch(() =>
         setError("Could not reach the AdvisorLens API. Start the backend on port 8000."),
       );
+    fetchGeneratorInfo()
+      .then(setGeneratorInfo)
+      .catch(() => setGeneratorInfo(null));
   }, []);
 
   async function run(action: () => Promise<AnalysisResult>) {
@@ -147,6 +153,7 @@ export default function Home() {
           <Results
             result={result}
             autoLoadBriefToken={briefRequest?.id === result.analysis_id ? briefRequest.token : undefined}
+            generatorInfo={generatorInfo}
           />
         )}
       </main>
@@ -157,9 +164,11 @@ export default function Home() {
 function Results({
   result,
   autoLoadBriefToken,
+  generatorInfo,
 }: {
   result: AnalysisResult;
   autoLoadBriefToken?: number;
+  generatorInfo: GeneratorInfo | null;
 }) {
   const { summary, flags } = result;
   const gain = summary.total_unrealized_gain_loss;
@@ -275,6 +284,7 @@ function Results({
         key={result.analysis_id}
         analysisId={result.analysis_id}
         autoLoadToken={autoLoadBriefToken}
+        generatorInfo={generatorInfo}
       />
 
       <p className="rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-500">

@@ -5,10 +5,11 @@ the stored analysis record (summary, flags, evidence, audit metadata) and
 nothing else. No findings are invented and no new recommendations are added.
 
 Pluggable design: `GENERATORS` maps a generator name to a callable taking
-the stored analysis record and returning the sections dict. A future LLM
-generator can be registered here (grounded on the same record and passed
-through the same compliance guard) without changing callers. No external
-API keys are required in Phase 2.
+the stored analysis record and returning the sections dict. Phase 3B adds
+the optional llm-v1 generator (see llm_brief.py), which drafts narrative
+language only, is grounded on the same record, passes through the same
+compliance guard, and falls back to deterministic-v1 on any failure.
+Deterministic remains the default; no external API keys are required.
 """
 
 from datetime import datetime, timezone
@@ -218,10 +219,24 @@ def _deterministic_brief(analysis: dict) -> dict:
     }
 
 
+def _llm_generator(analysis: dict) -> dict:
+    """llm-v1: LLM-drafted narrative grounded in the stored analysis record.
+
+    Lazy imports keep module dependencies one-directional (llm_brief imports
+    the deterministic generator from this module).
+    """
+    from . import llm, llm_brief
+
+    provider = llm.get_provider(llm.LLMConfig.from_env())
+    return llm_brief.generate_llm_sections(analysis, provider)
+
+
 GENERATORS = {
     "deterministic-v1": _deterministic_brief,
-    # A future LLM-backed generator plugs in here, e.g. "llm-v1": _llm_brief.
+    "llm-v1": _llm_generator,
 }
+
+FALLBACK_GENERATOR = "deterministic-fallback-after-llm-failure"
 
 
 def _walk_strings(value):
@@ -235,15 +250,71 @@ def _walk_strings(value):
             yield from _walk_strings(v)
 
 
-def generate_brief(analysis: dict, generator: str = DEFAULT_GENERATOR) -> dict:
-    """Build a brief from a stored analysis record and compliance-check every string."""
-    sections = GENERATORS[generator](analysis)
+def resolve_generator(requested: str | None = None) -> str:
+    """Deterministic stays the default. llm-v1 runs only when explicitly
+    requested per call or via ADVISORLENS_BRIEF_GENERATOR — never merely
+    because LLM credentials happen to be configured."""
+    import os
+
+    if requested:
+        return requested
+    env = os.environ.get("ADVISORLENS_BRIEF_GENERATOR", "").strip()
+    if env:
+        return env
+    return DEFAULT_GENERATOR
+
+
+def generate_brief(analysis: dict, generator: str | None = None) -> dict:
+    """Build a brief from a stored analysis record and compliance-check every string.
+
+    The llm-v1 path falls back safely to the deterministic sections on any
+    provider, parsing, validation, or compliance failure; the resulting brief
+    is marked deterministic-fallback-after-llm-failure with the reason kept
+    in generator_metadata (no prompts or secrets are stored — prompt version
+    only).
+    """
+    name = resolve_generator(generator)
+    if name not in GENERATORS:
+        raise KeyError(name)
+
+    metadata: dict = {
+        "requested_generator": name,
+        "provider": None,
+        "model": None,
+        "prompt_version": None,
+        "validation_status": "not_attempted",
+        "fallback_reason": None,
+    }
+
+    if name == "llm-v1":
+        from . import llm, llm_brief
+
+        config = llm.LLMConfig.from_env()
+        metadata.update(
+            provider=config.provider,
+            model=config.model,
+            prompt_version=llm_brief.PROMPT_VERSION,
+        )
+        try:
+            sections = GENERATORS[name](analysis)
+            metadata["validation_status"] = "passed"
+            final_name = "llm-v1"
+        except (llm.LLMProviderError, llm_brief.LLMBriefError) as exc:
+            sections = _deterministic_brief(analysis)
+            metadata["validation_status"] = "failed"
+            metadata["fallback_reason"] = str(exc)
+            final_name = FALLBACK_GENERATOR
+    else:
+        sections = GENERATORS[name](analysis)
+        final_name = name
+
     for text in _walk_strings(sections):
         compliance.assert_compliant_text(text, context="brief")
     return {
         "analysis_id": analysis["id"],
         "source_name": analysis["source_name"],
-        "generator": generator,
+        "generator": final_name,
+        "generator_metadata": metadata,
         "engine_version": ENGINE_VERSION,
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "sections": sections,
@@ -251,6 +322,16 @@ def generate_brief(analysis: dict, generator: str = DEFAULT_GENERATOR) -> dict:
 
 
 # --- Rendering -------------------------------------------------------------
+
+
+def _meta_model_line(brief: dict) -> str | None:
+    """Model/provider line for report headers; None for deterministic briefs
+    and for records stored before generator_metadata existed."""
+    metadata = brief.get("generator_metadata") or {}
+    if not metadata.get("model"):
+        return None
+    provider = metadata.get("provider")
+    return f"{metadata['model']} ({provider})" if provider else str(metadata["model"])
 
 
 def _evidence_lines(evidence: dict) -> list[str]:
@@ -270,6 +351,11 @@ def brief_to_markdown(brief: dict) -> str:
         f"| **Generated** | {brief['generated_at']} |",
         f"| **Engine version** | {brief['engine_version']} |",
         f"| **Generator** | {brief['generator']} |",
+        *(
+            [f"| **Model** | {_meta_model_line(brief)} |"]
+            if _meta_model_line(brief)
+            else []
+        ),
         "",
         "---",
         "",
@@ -456,6 +542,11 @@ def brief_to_html(brief: dict) -> str:
         f"<dt>Generated</dt><dd>{_esc(brief['generated_at'])}</dd>",
         f"<dt>Engine version</dt><dd>{_esc(brief['engine_version'])}</dd>",
         f"<dt>Generator</dt><dd>{_esc(brief['generator'])}</dd>",
+        *(
+            [f"<dt>Model</dt><dd>{_esc(_meta_model_line(brief))}</dd>"]
+            if _meta_model_line(brief)
+            else []
+        ),
         "</dl>",
         f"<h2>{SECTION_TITLES['executive_summary']}</h2>",
         *[f"<p>{_esc(p)}</p>" for p in s["executive_summary"]],

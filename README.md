@@ -25,11 +25,12 @@ print-ready PDF export. Every analysis is stored with an audit trail.
 | Analytics | Pandas                                    |
 | Storage   | SQLite (analyses + briefs + append-only audit log) |
 | PDF export| Headless Chromium via Playwright (renders the same HTML template) |
-| Tests     | pytest (82 tests)                         |
+| LLM (optional) | OpenAI-compatible `/chat/completions` provider behind the `GENERATORS` registry |
+| Tests     | pytest (108 tests)                        |
 
 shadcn/ui and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately deferred. The
-brief generator is deterministic in Phase 2 and designed so an LLM-backed generator can
-be plugged in later (`backend/app/brief.py` `GENERATORS`) without external API keys today.
+brief generator is deterministic by default; an optional LLM generator (`llm-v1`) drafts
+narrative language only and requires no API keys unless explicitly enabled.
 
 ## Project structure
 
@@ -40,7 +41,9 @@ backend/
     analytics.py    # total value, asset/sector allocation, top holdings, unrealized G/L
     rules.py        # deterministic review rules -> Flags with evidence + thresholds
     compliance.py   # banned-phrase guard applied to every generated flag and brief
-    brief.py        # Client Portfolio Review Brief generator + Markdown/HTML rendering
+    brief.py        # Client Portfolio Review Brief generators + Markdown/HTML rendering
+    llm.py          # optional LLM config (env) + OpenAI-compatible/mock providers
+    llm_brief.py    # llm-v1: input packet, prompt, validation + fact-token guard
     pdf_export.py   # renders the brief's HTML export to PDF via headless Chromium
     db.py           # SQLite: analyses + briefs + audit_log
     service.py      # ingest -> summarize -> rules -> persist pipeline
@@ -149,6 +152,44 @@ badge, plus Open, a Generate Brief / View Brief action (label reflects that stat
 Export Markdown / Export HTML / Export PDF actions per row — every export generates the
 brief on first request if one doesn't exist yet.
 
+## Optional LLM-backed briefs (llm-v1)
+
+The `GENERATORS` registry has a second entry, `llm-v1`, which asks an LLM to **rewrite the
+narrative language only** — deterministic rules remain the source of truth, and this does not
+turn AdvisorLens into a robo-advisor. It is a compliance-conscious MVP feature, not a
+production compliance system.
+
+**Deterministic stays the default.** `llm-v1` runs only when explicitly requested via
+`POST /analyses/{id}/brief?generator=llm-v1` or `ADVISORLENS_BRIEF_GENERATOR=llm-v1` —
+never merely because credentials are configured. With no environment variables set, the
+app is fully deterministic and needs no API keys.
+
+Configuration (environment variables only; no secrets are ever stored or logged):
+
+| Variable | Meaning |
+|---|---|
+| `ADVISORLENS_LLM_PROVIDER` | `openai-compatible` (any `/chat/completions` endpoint: OpenAI, Hermes, gateways) or `mock` (keyless test/demo provider) |
+| `ADVISORLENS_LLM_MODEL` | model name passed to the endpoint |
+| `ADVISORLENS_LLM_API_KEY` | bearer token (required for `openai-compatible`) |
+| `ADVISORLENS_LLM_BASE_URL` | endpoint base, default `https://api.openai.com/v1` |
+| `ADVISORLENS_LLM_TIMEOUT_SECONDS` | request timeout, default 30 |
+| `ADVISORLENS_BRIEF_GENERATOR` | default generator override (`deterministic-v1` or `llm-v1`) |
+
+Grounding and safety (all tested):
+- The model receives a **normalized input packet** (analysis metadata, summary, flags with
+  rule IDs/thresholds/evidence) and may return only the five narrative sections as strict JSON.
+- Portfolio snapshot, evidence table, data assumptions, and the compliance disclaimer are
+  copied **verbatim from the deterministic generator** — the model cannot alter them.
+- Validation compares the output back against the packet: exact 1:1 rule-ID mapping (no
+  invented or dropped review items), a stricter banned-phrase list (adds should invest,
+  tax-loss harvesting, harvest losses, execute trades, rebalance now, hold, …), and a
+  **fact-token guard**: any dollar amount, percentage, ticker-like symbol, or snake_case
+  identifier in the narrative must already appear in the packet.
+- Any provider error, invalid JSON, or validation failure falls back safely to the
+  deterministic brief, stored as `deterministic-fallback-after-llm-failure` with the reason
+  in `generator_metadata` and in the audit log (prompt version only — never prompt text or
+  keys). The UI shows a subtle "Generated with deterministic fallback" note.
+
 ## Storage & audit
 
 Each analysis is saved to SQLite (`backend/advisorlens.db`, created on first run) with the
@@ -157,9 +198,10 @@ Generated briefs are stored in a `briefs` table. An append-only `audit_log` reco
 completion events (including which rules fired), brief generations, and rejected
 ingestions with their validation errors.
 
-## Phase 3B+ candidates (not built)
+## Phase 3C+ candidates (not built)
 
-- LLM-backed brief generator registered alongside the deterministic one (Langfuse observability)
+- Real provider verification against a live LLM endpoint; an Anthropic-native provider
+- LLM observability (Langfuse) and prompt iteration
 - shadcn/ui component polish
 - Real market data (FMP), account aggregation (Plaid/SnapTrade)
 - Authentication and multi-user support

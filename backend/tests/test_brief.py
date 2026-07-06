@@ -211,4 +211,4 @@ def test_brief_is_deterministic_apart_from_timestamp(tmp_path):
 def test_unknown_generator_rejected(tmp_path, simple_csv):
     analysis = _analysis_for(tmp_path, simple_csv.encode(), "simple.csv")
     with pytest.raises(KeyError):
-        generate_brief(analysis, generator="llm-v1")
+        generate_brief(analysis, generator="no-such-generator")

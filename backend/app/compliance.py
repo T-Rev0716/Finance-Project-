@@ -16,7 +16,22 @@ BANNED_PHRASES = [
     r"\bwill outperform\b",
 ]
 
+# Extra phrases blocked only in LLM-drafted narrative. The deterministic
+# templates are already tested never to use these, so the global list stays
+# unchanged; model output gets the stricter scan. Word boundaries keep
+# harmless substrings safe (\bhold\b does not match holdings/holder/holds).
+LLM_EXTRA_BANNED_PHRASES = [
+    r"\bshould invest\b",
+    r"\btax[- ]loss harvesting\b",
+    r"\bharvest(?:ing|ed)? losses\b",
+    r"\bexecute trades?\b",
+    r"\brebalance now\b",
+    r"\bmake changes to taxable positions\b",
+    r"\bhold\b",
+]
+
 _BANNED_RE = re.compile("|".join(BANNED_PHRASES), re.IGNORECASE)
+_LLM_BANNED_RE = re.compile("|".join(BANNED_PHRASES + LLM_EXTRA_BANNED_PHRASES), re.IGNORECASE)
 
 
 class ComplianceError(RuntimeError):
@@ -25,6 +40,11 @@ class ComplianceError(RuntimeError):
 
 def find_violations(text: str) -> list[str]:
     return [m.group(0) for m in _BANNED_RE.finditer(text)]
+
+
+def find_llm_violations(text: str) -> list[str]:
+    """Stricter scan applied to LLM-drafted narrative before it is accepted."""
+    return [m.group(0) for m in _LLM_BANNED_RE.finditer(text)]
 
 
 def assert_compliant_text(text: str, context: str = "output") -> None:

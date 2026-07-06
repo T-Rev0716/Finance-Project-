@@ -137,12 +137,26 @@ def save_brief(db_path: Path | str, analysis_id: int, brief: dict) -> int:
             (analysis_id, _now(), brief["generator"], brief["engine_version"], json.dumps(brief)),
         )
         brief_id = int(cur.lastrowid)
+        metadata = brief.get("generator_metadata") or {}
         conn.execute(
             "INSERT INTO audit_log (analysis_id, event, detail_json, created_at) VALUES (?, ?, ?, ?)",
             (
                 analysis_id,
                 "brief_generated",
-                json.dumps({"brief_id": brief_id, "generator": brief["generator"]}),
+                json.dumps(
+                    {
+                        "brief_id": brief_id,
+                        "generator": brief["generator"],
+                        # Records both LLM successes and fallbacks. Never
+                        # includes prompts or secrets — prompt version only.
+                        "requested_generator": metadata.get("requested_generator"),
+                        "provider": metadata.get("provider"),
+                        "model": metadata.get("model"),
+                        "prompt_version": metadata.get("prompt_version"),
+                        "validation_status": metadata.get("validation_status"),
+                        "fallback_reason": metadata.get("fallback_reason"),
+                    }
+                ),
                 _now(),
             ),
         )

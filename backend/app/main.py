@@ -12,8 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from . import ENGINE_VERSION, db
-from .brief import brief_to_html, brief_to_markdown, generate_brief
+from .brief import GENERATORS, brief_to_html, brief_to_markdown, generate_brief, resolve_generator
 from .ingestion import IngestionError
+from .llm import LLMConfig
 from .pdf_export import PdfRenderError, html_to_pdf_bytes
 from .service import analyze_csv
 
@@ -35,7 +36,14 @@ app.add_middleware(
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "engine_version": ENGINE_VERSION}
+    llm_config = LLMConfig.from_env()
+    return {
+        "status": "ok",
+        "engine_version": ENGINE_VERSION,
+        "default_brief_generator": resolve_generator(),
+        "llm_configured": llm_config.is_configured,
+        "llm_model": llm_config.model if llm_config.is_configured else None,
+    }
 
 
 @app.get("/samples")
@@ -75,7 +83,9 @@ def get_analysis(analysis_id: int) -> dict:
     return result
 
 
-def _get_or_generate_brief(analysis_id: int, regenerate: bool = False) -> dict:
+def _get_or_generate_brief(
+    analysis_id: int, regenerate: bool = False, generator: str | None = None
+) -> dict:
     if not regenerate:
         stored = db.get_latest_brief(DB_PATH, analysis_id)
         if stored is not None:
@@ -83,7 +93,7 @@ def _get_or_generate_brief(analysis_id: int, regenerate: bool = False) -> dict:
     analysis = db.get_analysis(DB_PATH, analysis_id)
     if analysis is None:
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found.")
-    brief = generate_brief(analysis)
+    brief = generate_brief(analysis, generator=generator)
     db.save_brief(DB_PATH, analysis_id, brief)
     return brief
 
@@ -95,9 +105,18 @@ def get_brief(analysis_id: int) -> dict:
 
 
 @app.post("/analyses/{analysis_id}/brief")
-def regenerate_brief(analysis_id: int) -> dict:
-    """Force regeneration of the brief (stored as a new brief record)."""
-    return _get_or_generate_brief(analysis_id, regenerate=True)
+def regenerate_brief(analysis_id: int, generator: str | None = None) -> dict:
+    """Force regeneration of the brief (stored as a new brief record).
+
+    Optional `generator` query param requests a specific generator
+    (e.g. llm-v1); omitted, the deterministic default applies.
+    """
+    if generator is not None and generator not in GENERATORS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown generator '{generator}'. Available: {sorted(GENERATORS)}.",
+        )
+    return _get_or_generate_brief(analysis_id, regenerate=True, generator=generator)
 
 
 @app.get("/analyses/{analysis_id}/brief/markdown")
