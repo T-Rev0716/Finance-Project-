@@ -58,6 +58,7 @@ export interface SavedAnalysis {
   client_goal: string;
   total_market_value: number;
   flag_count: number;
+  has_brief: boolean;
 }
 
 export interface BriefSections {

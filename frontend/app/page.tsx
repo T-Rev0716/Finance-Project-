@@ -27,6 +27,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<"analyze" | "history">("analyze");
+  const [briefRequest, setBriefRequest] = useState<{ id: number; token: number } | null>(null);
 
   useEffect(() => {
     fetchSamples()
@@ -48,6 +49,15 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function openFromHistory(id: number) {
+    run(() => getAnalysis(id));
+  }
+
+  function viewBriefFromHistory(id: number) {
+    setBriefRequest({ id, token: Date.now() });
+    run(() => getAnalysis(id));
   }
 
   return (
@@ -79,7 +89,11 @@ export default function Home() {
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-6">
         {tab === "history" && (
-          <HistoryView opening={loading} onOpen={(id) => run(() => getAnalysis(id))} />
+          <HistoryView
+            opening={loading}
+            onOpen={openFromHistory}
+            onViewBrief={viewBriefFromHistory}
+          />
         )}
 
         <section className={`rounded-lg border bg-white p-5 ${tab !== "analyze" ? "hidden" : ""}`}>
@@ -97,12 +111,17 @@ export default function Home() {
                 {name.replace(".csv", "").replaceAll("_", " ")}
               </button>
             ))}
-            <label className="cursor-pointer rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700">
+            <label
+              className={`rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-700 ${
+                loading ? "pointer-events-none opacity-50" : "cursor-pointer"
+              }`}
+            >
               Upload CSV
               <input
                 type="file"
                 accept=".csv"
                 className="hidden"
+                disabled={loading}
                 onChange={(e) => {
                   const file = e.target.files?.[0];
                   if (file) run(() => analyzeUpload(file));
@@ -124,13 +143,24 @@ export default function Home() {
           )}
         </section>
 
-        {tab === "analyze" && result && <Results result={result} />}
+        {tab === "analyze" && result && (
+          <Results
+            result={result}
+            autoLoadBriefToken={briefRequest?.id === result.analysis_id ? briefRequest.token : undefined}
+          />
+        )}
       </main>
     </div>
   );
 }
 
-function Results({ result }: { result: AnalysisResult }) {
+function Results({
+  result,
+  autoLoadBriefToken,
+}: {
+  result: AnalysisResult;
+  autoLoadBriefToken?: number;
+}) {
   const { summary, flags } = result;
   const gain = summary.total_unrealized_gain_loss;
   return (
@@ -241,7 +271,11 @@ function Results({ result }: { result: AnalysisResult }) {
         </table>
       </section>
 
-      <BriefView key={result.analysis_id} analysisId={result.analysis_id} />
+      <BriefView
+        key={result.analysis_id}
+        analysisId={result.analysis_id}
+        autoLoadToken={autoLoadBriefToken}
+      />
 
       <p className="rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-500">
         {result.disclaimer}

@@ -107,7 +107,8 @@ _FOLLOW_UPS = {
     "cash_drag": "Confirm the client's target cash reserve and timeline.",
     "risk_tolerance_mismatch": "Revisit and re-document the client's risk tolerance questionnaire.",
     "tax_review_taxable_loss": (
-        "Coordinate with the client's tax professional before any changes to taxable positions."
+        "Encourage review with a qualified tax professional before any tax-related decisions "
+        "are considered."
     ),
 }
 
@@ -252,8 +253,8 @@ def generate_brief(analysis: dict, generator: str = DEFAULT_GENERATOR) -> dict:
 # --- Rendering -------------------------------------------------------------
 
 
-def _flatten_evidence(evidence: dict) -> str:
-    return "; ".join(f"{k}={v}" for k, v in evidence.items())
+def _evidence_lines(evidence: dict) -> list[str]:
+    return [f"{k}: {v}" for k, v in evidence.items()]
 
 
 def brief_to_markdown(brief: dict) -> str:
@@ -262,9 +263,15 @@ def brief_to_markdown(brief: dict) -> str:
     lines: list[str] = [
         "# Client Portfolio Review Brief",
         "",
-        f"*Source file: {brief['source_name']} · analysis #{brief['analysis_id']} · "
-        f"generated {brief['generated_at']} · generator {brief['generator']} · "
-        f"engine v{brief['engine_version']}*",
+        "| | |",
+        "|---|---|",
+        f"| **Analysis ID** | {brief['analysis_id']} |",
+        f"| **Source file** | {brief['source_name']} |",
+        f"| **Generated** | {brief['generated_at']} |",
+        f"| **Engine version** | {brief['engine_version']} |",
+        f"| **Generator** | {brief['generator']} |",
+        "",
+        "---",
         "",
         f"## {SECTION_TITLES['executive_summary']}",
         "",
@@ -272,11 +279,11 @@ def brief_to_markdown(brief: dict) -> str:
         "",
         f"## {SECTION_TITLES['portfolio_snapshot']}",
         "",
-        f"- Total market value: {_money(snap['total_market_value'])}",
-        f"- Total cost basis: {_money(snap['total_cost_basis'])}",
-        f"- Unrealized gain/loss: {_money(snap['total_unrealized_gain_loss'])}",
-        f"- Holdings: {snap['holdings_count']}",
-        f"- Risk tolerance: {snap['risk_tolerance']} · Goal: {snap['client_goal']}",
+        f"- **Total market value:** {_money(snap['total_market_value'])}",
+        f"- **Total cost basis:** {_money(snap['total_cost_basis'])}",
+        f"- **Unrealized gain/loss:** {_money(snap['total_unrealized_gain_loss'])}",
+        f"- **Holdings:** {snap['holdings_count']}",
+        f"- **Risk tolerance:** {snap['risk_tolerance']} · **Goal:** {snap['client_goal']}",
         "",
         "### Asset allocation",
         "",
@@ -306,43 +313,51 @@ def brief_to_markdown(brief: dict) -> str:
             for h in snap["top_holdings"]
         ],
         "",
+        "---",
+        "",
         f"## {SECTION_TITLES['key_review_items']}",
         "",
     ]
     if s["key_review_items"]:
-        for item in s["key_review_items"]:
+        for i, item in enumerate(s["key_review_items"]):
+            if i > 0:
+                lines.append("")
             lines += [
-                f"### [{item['severity'].upper()}] {item['title']} (`{item['rule_id']}`)",
+                f"### [{item['severity'].upper()}] {item['title']}",
+                "",
+                f"*Rule: `{item['rule_id']}`*",
                 "",
                 item["message"],
-                "",
             ]
+        lines.append("")
     else:
         lines += ["No review thresholds were exceeded for this portfolio.", ""]
 
+    lines.append("---")
+    lines.append("")
     for key in ("advisor_talking_points", "client_discussion_questions", "follow_up_items"):
         lines += [f"## {SECTION_TITLES[key]}", ""]
         lines += [f"- {entry}" for entry in s[key]]
         lines += [""]
 
-    lines += [f"## {SECTION_TITLES['evidence_table']}", ""]
+    lines += ["---", "", f"## {SECTION_TITLES['evidence_table']}", ""]
     if s["evidence_table"]:
-        lines += [
-            "| Rule ID | Severity | Threshold | Evidence |",
-            "|---|---|---|---|",
-            *[
-                f"| `{row['rule_id']}` | {row['severity']} | {row['threshold']} | "
-                f"{_flatten_evidence(row['evidence'])} |"
-                for row in s["evidence_table"]
-            ],
-            "",
-        ]
+        for row in s["evidence_table"]:
+            lines += [
+                f"**`{row['rule_id']}`** · severity: {row['severity']} · "
+                f"threshold: {row['threshold']}",
+                "",
+            ]
+            lines += [f"- {line}" for line in _evidence_lines(row["evidence"])]
+            lines.append("")
     else:
         lines += ["No rules fired; there is no evidence to report.", ""]
 
-    lines += [f"## {SECTION_TITLES['data_assumptions']}", ""]
+    lines += ["---", "", f"## {SECTION_TITLES['data_assumptions']}", ""]
     lines += [f"- {entry}" for entry in s["data_assumptions"]]
     lines += [
+        "",
+        "---",
         "",
         f"## {SECTION_TITLES['compliance_disclaimer']}",
         "",
@@ -353,23 +368,50 @@ def brief_to_markdown(brief: dict) -> str:
 
 
 _HTML_STYLE = """
+  :root { color-scheme: light; }
   body { font-family: Georgia, 'Times New Roman', serif; color: #1a202c;
-         max-width: 800px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.55; }
-  h1 { font-size: 1.6rem; border-bottom: 2px solid #1a202c; padding-bottom: .4rem; }
-  h2 { font-size: 1.15rem; margin-top: 1.8rem; border-bottom: 1px solid #cbd5e0;
-       padding-bottom: .2rem; }
-  h3 { font-size: 1rem; margin-top: 1.1rem; }
-  table { border-collapse: collapse; width: 100%; margin: .6rem 0; font-size: .85rem; }
-  th, td { border: 1px solid #cbd5e0; padding: .35rem .5rem; text-align: left; }
-  th { background: #f7fafc; }
-  .meta { color: #718096; font-size: .8rem; }
+         max-width: 820px; margin: 2.5rem auto; padding: 0 2rem 3rem; line-height: 1.65; }
+  h1 { font-size: 1.7rem; margin-bottom: .3rem; }
+  .report-meta { border: 1px solid #cbd5e0; border-radius: 6px; background: #f7fafc;
+                 padding: .9rem 1.1rem; margin: 1rem 0 2.2rem; font-size: .82rem;
+                 color: #4a5568; display: grid; grid-template-columns: auto 1fr;
+                 column-gap: .8rem; row-gap: .3rem; }
+  .report-meta dt { font-weight: 600; color: #2d3748; }
+  .report-meta dd { margin: 0; }
+  h2 { font-size: 1.2rem; margin-top: 2.6rem; margin-bottom: 1rem; color: #1a202c;
+       border-bottom: 2px solid #2d3748; padding-bottom: .35rem; }
+  h3 { font-size: 1.02rem; margin-top: 1.5rem; margin-bottom: .5rem; }
+  p { margin: .6rem 0; }
+  ul { margin: .5rem 0; padding-left: 1.4rem; }
+  li { margin: .3rem 0; }
+  table { border-collapse: collapse; width: 100%; margin: .8rem 0 1.4rem; font-size: .85rem; }
+  th, td { border: 1px solid #d0d7de; padding: .5rem .6rem; text-align: left;
+           vertical-align: top; }
+  th { background: #f0f2f5; font-weight: 600; }
+  tr:nth-child(even) td { background: #fafbfc; }
+  .evidence-item { border: 1px solid #d0d7de; border-radius: 6px; padding: .7rem .9rem;
+                    margin: 0 0 .9rem; }
+  .evidence-item h4 { margin: 0 0 .3rem; font-size: .88rem; }
+  .evidence-item ul { margin: .4rem 0 0; font-family: ui-monospace, Menlo, monospace;
+                       font-size: .78rem; color: #4a5568; }
+  .review-item { border-left: 3px solid #cbd5e0; padding: .2rem 0 .2rem 1rem; margin: 1.2rem 0; }
+  .review-item.severity-high { border-left-color: #9b2c2c; }
+  .review-item.severity-medium { border-left-color: #975a16; }
+  .review-item.severity-info { border-left-color: #2b6cb0; }
   .severity-high { color: #9b2c2c; font-weight: bold; }
   .severity-medium { color: #975a16; font-weight: bold; }
   .severity-info { color: #2b6cb0; font-weight: bold; }
-  .disclaimer { border: 1px solid #cbd5e0; background: #f7fafc; padding: .8rem;
-                font-size: .85rem; margin-top: 1rem; }
-  code { background: #edf2f7; padding: 0 .25rem; font-size: .85em; }
-  @media print { body { margin: 0; max-width: none; } h2 { page-break-after: avoid; } }
+  .disclaimer { border: 1px solid #cbd5e0; background: #f7fafc; border-radius: 6px;
+                padding: 1rem 1.1rem; font-size: .85rem; margin-top: 1rem; }
+  code { background: #edf2f7; padding: .1rem .3rem; border-radius: 3px; font-size: .85em; }
+  @media print {
+    body { margin: 0; max-width: none; padding: 0 .3in; }
+    @page { margin: 0.6in; }
+    h2 { page-break-after: avoid; }
+    h3, .evidence-item, .review-item, tr { page-break-inside: avoid; }
+    table { page-break-inside: auto; }
+    a { color: inherit; text-decoration: none; }
+  }
 """
 
 
@@ -404,9 +446,13 @@ def brief_to_html(brief: dict) -> str:
         f"<title>Client Portfolio Review Brief — {_esc(brief['source_name'])}</title>",
         f"<style>{_HTML_STYLE}</style></head><body>",
         "<h1>Client Portfolio Review Brief</h1>",
-        f"<p class='meta'>Source file: {_esc(brief['source_name'])} · analysis "
-        f"#{brief['analysis_id']} · generated {_esc(brief['generated_at'])} · generator "
-        f"{_esc(brief['generator'])} · engine v{_esc(brief['engine_version'])}</p>",
+        "<dl class='report-meta'>",
+        f"<dt>Analysis ID</dt><dd>{brief['analysis_id']}</dd>",
+        f"<dt>Source file</dt><dd>{_esc(brief['source_name'])}</dd>",
+        f"<dt>Generated</dt><dd>{_esc(brief['generated_at'])}</dd>",
+        f"<dt>Engine version</dt><dd>{_esc(brief['engine_version'])}</dd>",
+        f"<dt>Generator</dt><dd>{_esc(brief['generator'])}</dd>",
+        "</dl>",
         f"<h2>{SECTION_TITLES['executive_summary']}</h2>",
         *[f"<p>{_esc(p)}</p>" for p in s["executive_summary"]],
         f"<h2>{SECTION_TITLES['portfolio_snapshot']}</h2>",
@@ -433,10 +479,12 @@ def brief_to_html(brief: dict) -> str:
     if s["key_review_items"]:
         for item in s["key_review_items"]:
             parts += [
+                f"<div class='review-item severity-{_esc(item['severity'])}'>",
                 f"<h3><span class='severity-{_esc(item['severity'])}'>"
                 f"[{_esc(item['severity'].upper())}]</span> {_esc(item['title'])} "
                 f"<code>{_esc(item['rule_id'])}</code></h3>",
                 f"<p>{_esc(item['message'])}</p>",
+                "</div>",
             ]
     else:
         parts.append("<p>No review thresholds were exceeded for this portfolio.</p>")
@@ -448,15 +496,17 @@ def brief_to_html(brief: dict) -> str:
 
     parts.append(f"<h2>{SECTION_TITLES['evidence_table']}</h2>")
     if s["evidence_table"]:
-        parts.append(
-            "<table><tr><th>Rule ID</th><th>Severity</th><th>Threshold</th><th>Evidence</th></tr>"
-        )
-        parts += [
-            f"<tr><td><code>{_esc(row['rule_id'])}</code></td><td>{_esc(row['severity'])}</td>"
-            f"<td>{_esc(row['threshold'])}</td><td>{_esc(_flatten_evidence(row['evidence']))}</td></tr>"
-            for row in s["evidence_table"]
-        ]
-        parts.append("</table>")
+        for row in s["evidence_table"]:
+            evidence_items = "".join(
+                f"<li>{_esc(line)}</li>" for line in _evidence_lines(row["evidence"])
+            )
+            parts += [
+                "<div class='evidence-item'>",
+                f"<h4><code>{_esc(row['rule_id'])}</code> · severity: {_esc(row['severity'])} · "
+                f"threshold: {_esc(row['threshold'])}</h4>",
+                f"<ul>{evidence_items}</ul>",
+                "</div>",
+            ]
     else:
         parts.append("<p>No rules fired; there is no evidence to report.</p>")
 

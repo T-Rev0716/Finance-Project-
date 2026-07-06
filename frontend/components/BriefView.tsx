@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Brief, briefExportUrl, formatMoney, getBrief } from "@/lib/api";
 
@@ -10,7 +10,20 @@ const SEVERITY_TEXT: Record<string, string> = {
   info: "text-sky-700",
 };
 
-export default function BriefView({ analysisId }: { analysisId: number }) {
+const SEVERITY_BORDER: Record<string, string> = {
+  high: "border-l-red-700",
+  medium: "border-l-amber-700",
+  info: "border-l-sky-700",
+};
+
+export default function BriefView({
+  analysisId,
+  autoLoadToken,
+}: {
+  analysisId: number;
+  /** Changing this value (e.g. from a "View Brief" click) triggers an automatic load. */
+  autoLoadToken?: number;
+}) {
   const [brief, setBrief] = useState<Brief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,13 +40,19 @@ export default function BriefView({ analysisId }: { analysisId: number }) {
     }
   }
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: fetch on external trigger token
+    if (autoLoadToken !== undefined) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoLoadToken]);
+
   return (
     <section className="rounded-lg border bg-white p-5 print:border-0">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
           Client Portfolio Review Brief
         </h2>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 print:hidden">
           {!brief && (
             <button
               onClick={load}
@@ -85,11 +104,27 @@ export default function BriefView({ analysisId }: { analysisId: number }) {
 function BriefBody({ brief }: { brief: Brief }) {
   const s = brief.sections;
   return (
-    <div className="mt-4 space-y-5 text-sm">
-      <p className="text-xs text-slate-400">
-        Generated {new Date(brief.generated_at).toLocaleString()} · generator {brief.generator} ·
-        engine v{brief.engine_version}
-      </p>
+    <div className="mt-5 space-y-6 text-sm">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-4">
+        <div>
+          <dt className="font-semibold text-slate-700">Analysis ID</dt>
+          <dd>{brief.analysis_id}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-slate-700">Source file</dt>
+          <dd className="truncate">{brief.source_name}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-slate-700">Generated</dt>
+          <dd>{new Date(brief.generated_at).toLocaleString()}</dd>
+        </div>
+        <div>
+          <dt className="font-semibold text-slate-700">Engine version</dt>
+          <dd>
+            {brief.engine_version} ({brief.generator})
+          </dd>
+        </div>
+      </dl>
 
       <Section title="Executive Summary">
         {s.executive_summary.map((p) => (
@@ -114,15 +149,18 @@ function BriefBody({ brief }: { brief: Brief }) {
         {s.key_review_items.length === 0 ? (
           <p className="text-slate-500">No review thresholds were exceeded for this portfolio.</p>
         ) : (
-          <ul className="space-y-2">
+          <ul className="space-y-3">
             {s.key_review_items.map((item, i) => (
-              <li key={`${item.rule_id}-${i}`}>
+              <li
+                key={`${item.rule_id}-${i}`}
+                className={`border-l-4 pl-3 ${SEVERITY_BORDER[item.severity] ?? "border-l-slate-300"}`}
+              >
                 <span className={`font-semibold ${SEVERITY_TEXT[item.severity] ?? ""}`}>
                   [{item.severity.toUpperCase()}]
                 </span>{" "}
                 <span className="font-medium">{item.title}</span>{" "}
                 <code className="rounded bg-slate-100 px-1 text-xs">{item.rule_id}</code>
-                <p className="text-slate-600">{item.message}</p>
+                <p className="mt-1 text-slate-600">{item.message}</p>
               </li>
             ))}
           </ul>
@@ -137,32 +175,23 @@ function BriefBody({ brief }: { brief: Brief }) {
         {s.evidence_table.length === 0 ? (
           <p className="text-slate-500">No rules fired; there is no evidence to report.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b text-left uppercase text-slate-400">
-                  <th className="py-1 pr-2">Rule ID</th>
-                  <th className="py-1 pr-2">Severity</th>
-                  <th className="py-1 pr-2">Threshold</th>
-                  <th className="py-1">Evidence</th>
-                </tr>
-              </thead>
-              <tbody>
-                {s.evidence_table.map((row, i) => (
-                  <tr key={`${row.rule_id}-${i}`} className="border-b align-top last:border-0">
-                    <td className="py-1.5 pr-2 font-mono">{row.rule_id}</td>
-                    <td className="py-1.5 pr-2">{row.severity}</td>
-                    <td className="py-1.5 pr-2">{row.threshold}</td>
-                    <td className="py-1.5 font-mono text-slate-500">
-                      {Object.entries(row.evidence)
-                        .map(([k, v]) => `${k}=${JSON.stringify(v)}`)
-                        .join("; ")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="space-y-3">
+            {s.evidence_table.map((row, i) => (
+              <li key={`${row.rule_id}-${i}`} className="rounded-md border p-3">
+                <p className="text-xs text-slate-600">
+                  <code className="rounded bg-slate-100 px-1 font-mono">{row.rule_id}</code>{" "}
+                  · severity: {row.severity} · threshold: {row.threshold}
+                </p>
+                <ul className="mt-2 space-y-0.5 font-mono text-xs text-slate-500">
+                  {Object.entries(row.evidence).map(([k, v]) => (
+                    <li key={k}>
+                      {k}: {JSON.stringify(v)}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
         )}
       </Section>
 

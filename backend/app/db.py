@@ -162,13 +162,14 @@ def list_analyses(db_path: Path | str, limit: int = 20) -> list[dict]:
     with _connect(db_path) as conn:
         rows = conn.execute(
             """
-            SELECT id, created_at, source_name, file_sha256, engine_version,
-                   risk_tolerance, client_goal, total_market_value, flag_count
-            FROM analyses ORDER BY id DESC LIMIT ?
+            SELECT a.id, a.created_at, a.source_name, a.file_sha256, a.engine_version,
+                   a.risk_tolerance, a.client_goal, a.total_market_value, a.flag_count,
+                   EXISTS(SELECT 1 FROM briefs b WHERE b.analysis_id = a.id) AS has_brief
+            FROM analyses a ORDER BY a.id DESC LIMIT ?
             """,
             (limit,),
         ).fetchall()
-    return [dict(r) for r in rows]
+    return [{**dict(r), "has_brief": bool(r["has_brief"])} for r in rows]
 
 
 def get_analysis(db_path: Path | str, analysis_id: int) -> dict | None:

@@ -80,8 +80,8 @@ compliance guard, and covered by tests.
 
 | File                        | Demonstrates                                                        |
 |-----------------------------|---------------------------------------------------------------------|
-| `growth_concentrated.csv`   | Single-holding concentration (NVDA 24%), Technology sector 56%, taxable loss note |
-| `conservative_mismatch.csv` | Conservative profile with 70% equity, taxable loss note (IRA losses correctly ignored) |
+| `growth_concentrated.csv`   | Single-holding concentration (NVDA 24%), Technology sector 56%, tax-related review consideration |
+| `conservative_mismatch.csv` | Conservative profile with 70% equity, tax-related review consideration (IRA losses correctly ignored) |
 | `retiree_cash_drag.csv`     | 18% cash (cash drag) and a retirement-account loss that produces no tax language |
 
 ## Running it
@@ -136,6 +136,10 @@ Grounding guarantees (tested):
 - All brief text passes the banned-phrase compliance guard at generation time.
 - Tax items use "tax-related review consideration" wording, and the brief states it is
   not tax, legal, or investment advice.
+
+The History tab lists every saved analysis with a Generated / Not generated brief status
+badge, plus Open, View Brief, Export Markdown, and Export HTML actions per row — briefs
+generate on first request if one doesn't exist yet.
 
 ## Storage & audit
 

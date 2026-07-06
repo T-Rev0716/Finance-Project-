@@ -198,6 +198,8 @@ def test_taxable_unrealized_loss_triggers():
     assert flags[0].evidence["unrealized_gain_loss"] == -2000.0
     assert flags[0].evidence["is_retirement_account"] is False
     # Wording policy: consideration-style language, never loss-harvesting phrasing.
+    assert flags[0].title == "Tax-related review consideration: XOM"
+    assert "Tax review note" not in flags[0].title
     assert "tax-related review consideration" in flags[0].message
     assert "tax-loss" not in flags[0].message.lower()
     assert "harvest" not in flags[0].message.lower()

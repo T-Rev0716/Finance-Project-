@@ -191,7 +191,7 @@ def rule_taxable_unrealized_loss(portfolio: Portfolio) -> list[Flag]:
             Flag(
                 rule_id="tax_review_taxable_loss",
                 severity="info",
-                title=f"Tax review note: {row.ticker}",
+                title=f"Tax-related review consideration: {row.ticker}",
                 message=(
                     f"{row.security_name} ({row.ticker}) in a {row.account_type} account shows an "
                     f"unrealized loss of ${abs(row.unrealized_gain_loss):,.2f}. This may indicate a "

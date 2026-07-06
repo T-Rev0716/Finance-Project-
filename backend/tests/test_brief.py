@@ -92,6 +92,21 @@ def test_tax_wording_uses_review_consideration_style(mismatch_brief):
         assert "tax loss" not in text.lower()
         assert "harvest" not in text.lower()
 
+    titles = [i["title"] for i in mismatch_brief["sections"]["key_review_items"]]
+    assert any(t.startswith("Tax-related review consideration:") for t in titles)
+    assert not any("Tax review note" in t for t in titles)
+
+
+def test_taxable_followup_uses_softened_wording(mismatch_brief):
+    follow_ups = mismatch_brief["sections"]["follow_up_items"]
+    assert any(
+        "Encourage review with a qualified tax professional before any tax-related "
+        "decisions are considered." in f
+        for f in follow_ups
+    )
+    for f in follow_ups:
+        assert "before any changes to taxable positions" not in f
+
 
 def test_retirement_losses_produce_no_tax_items(retiree_brief):
     sections = retiree_brief["sections"]
@@ -117,6 +132,20 @@ def test_markdown_render(mismatch_brief):
     assert "not tax, legal, or investment advice" in md
 
 
+def test_markdown_report_header_block(mismatch_brief):
+    md = brief_to_markdown(mismatch_brief)
+    assert f"**Analysis ID** | {mismatch_brief['analysis_id']}" in md
+    assert f"**Source file** | {mismatch_brief['source_name']}" in md
+    assert f"**Generated** | {mismatch_brief['generated_at']}" in md
+    assert f"**Engine version** | {mismatch_brief['engine_version']}" in md
+
+
+def test_markdown_evidence_readable_per_item(mismatch_brief):
+    md = brief_to_markdown(mismatch_brief)
+    assert "risk_tolerance: Conservative" in md
+    assert "equity_weight_pct: 70" in md
+
+
 def test_html_render(mismatch_brief):
     html = brief_to_html(mismatch_brief)
     assert html.startswith("<!DOCTYPE html>")
@@ -126,6 +155,29 @@ def test_html_render(mismatch_brief):
     assert "not tax, legal, or investment advice" in html
     # Evidence values escaped and present.
     assert "Johnson &amp; Johnson" in html
+
+
+def test_html_report_header_block(mismatch_brief):
+    html = brief_to_html(mismatch_brief)
+    assert "<dt>Analysis ID</dt>" in html
+    assert f"<dd>{mismatch_brief['analysis_id']}</dd>" in html
+    assert "<dt>Source file</dt>" in html
+    assert "<dt>Generated</dt>" in html
+    assert "<dt>Engine version</dt>" in html
+
+
+def test_html_evidence_rendered_as_list_not_flattened_row(mismatch_brief):
+    html = brief_to_html(mismatch_brief)
+    assert "<div class='evidence-item'>" in html
+    assert "risk_tolerance: Conservative" in html
+    # Old flattened single-cell format (key=value; key=value) should be gone.
+    assert "risk_tolerance=" not in html
+
+
+def test_html_print_media_rules_present(mismatch_brief):
+    html = brief_to_html(mismatch_brief)
+    assert "@media print" in html
+    assert "page-break-inside: avoid" in html
 
 
 def test_brief_is_deterministic_apart_from_timestamp(tmp_path):

@@ -123,3 +123,15 @@ def test_brief_endpoints_404_for_missing_analysis(client):
     assert client.post("/analyses/999/brief").status_code == 404
     assert client.get("/analyses/999/brief/markdown").status_code == 404
     assert client.get("/analyses/999/brief/html").status_code == 404
+
+
+def test_list_analyses_reflects_brief_generation(client):
+    analysis_id = client.post("/analyze/sample/growth_concentrated.csv").json()["analysis_id"]
+
+    before = client.get("/analyses").json()["analyses"][0]
+    assert before["has_brief"] is False
+
+    client.get(f"/analyses/{analysis_id}/brief")
+
+    after = client.get("/analyses").json()["analyses"][0]
+    assert after["has_brief"] is True

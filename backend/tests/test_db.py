@@ -1,4 +1,5 @@
 from app import db
+from app.brief import generate_brief
 from app.service import analyze_csv
 
 
@@ -37,3 +38,20 @@ def test_list_analyses_orders_newest_first(tmp_path, simple_csv):
 
 def test_get_missing_analysis_returns_none(tmp_path):
     assert db.get_analysis(tmp_path / "test.db", 999) is None
+
+
+def test_list_analyses_reports_brief_status(tmp_path, simple_csv):
+    db_path = tmp_path / "test.db"
+    first = analyze_csv(simple_csv.encode(), source_name="first.csv", db_path=db_path)
+    analyze_csv(simple_csv.encode(), source_name="second.csv", db_path=db_path)
+
+    rows = {r["source_name"]: r for r in db.list_analyses(db_path)}
+    assert rows["first.csv"]["has_brief"] is False
+    assert rows["second.csv"]["has_brief"] is False
+
+    analysis = db.get_analysis(db_path, first["analysis_id"])
+    db.save_brief(db_path, first["analysis_id"], generate_brief(analysis))
+
+    rows = {r["source_name"]: r for r in db.list_analyses(db_path)}
+    assert rows["first.csv"]["has_brief"] is True
+    assert rows["second.csv"]["has_brief"] is False

@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 
-import { SavedAnalysis, formatMoney, listAnalyses } from "@/lib/api";
+import { SavedAnalysis, briefExportUrl, formatMoney, listAnalyses } from "@/lib/api";
 
 export default function HistoryView({
   onOpen,
+  onViewBrief,
   opening,
 }: {
   onOpen: (id: number) => void;
+  onViewBrief: (id: number) => void;
   opening: boolean;
 }) {
   const [analyses, setAnalyses] = useState<SavedAnalysis[] | null>(null);
@@ -26,7 +28,12 @@ export default function HistoryView({
     );
   }
   if (analyses === null) {
-    return <p className="text-sm text-slate-500">Loading saved analyses…</p>;
+    return (
+      <p className="flex items-center gap-2 text-sm text-slate-500">
+        <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+        Loading saved analyses…
+      </p>
+    );
   }
   if (analyses.length === 0) {
     return (
@@ -52,6 +59,7 @@ export default function HistoryView({
               <th className="py-2 pr-3">Profile</th>
               <th className="py-2 pr-3 text-right">Total value</th>
               <th className="py-2 pr-3 text-right">Review items</th>
+              <th className="py-2 pr-3">Brief</th>
               <th className="py-2"></th>
             </tr>
           </thead>
@@ -68,14 +76,48 @@ export default function HistoryView({
                 </td>
                 <td className="py-2 pr-3 text-right">{formatMoney(a.total_market_value)}</td>
                 <td className="py-2 pr-3 text-right">{a.flag_count}</td>
-                <td className="py-2 text-right">
-                  <button
-                    onClick={() => onOpen(a.id)}
-                    disabled={opening}
-                    className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100 disabled:opacity-50"
+                <td className="py-2 pr-3">
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-xs font-medium ${
+                      a.has_brief
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-slate-200 bg-slate-50 text-slate-500"
+                    }`}
                   >
-                    Open
-                  </button>
+                    {a.has_brief ? "Generated" : "Not generated"}
+                  </span>
+                </td>
+                <td className="py-2">
+                  <div className="flex flex-wrap justify-end gap-1.5">
+                    <button
+                      onClick={() => onOpen(a.id)}
+                      disabled={opening}
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => onViewBrief(a.id)}
+                      disabled={opening}
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100 disabled:opacity-50"
+                    >
+                      View Brief
+                    </button>
+                    <a
+                      href={briefExportUrl(a.id, "markdown")}
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100"
+                    >
+                      Export Markdown
+                    </a>
+                    <a
+                      href={briefExportUrl(a.id, "html")}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100"
+                    >
+                      Export HTML
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}
