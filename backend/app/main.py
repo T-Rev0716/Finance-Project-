@@ -9,8 +9,10 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from . import ENGINE_VERSION, db
+from .brief import brief_to_html, brief_to_markdown, generate_brief
 from .ingestion import IngestionError
 from .service import analyze_csv
 
@@ -70,6 +72,49 @@ def get_analysis(analysis_id: int) -> dict:
     if result is None:
         raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found.")
     return result
+
+
+def _get_or_generate_brief(analysis_id: int, regenerate: bool = False) -> dict:
+    if not regenerate:
+        stored = db.get_latest_brief(DB_PATH, analysis_id)
+        if stored is not None:
+            return stored
+    analysis = db.get_analysis(DB_PATH, analysis_id)
+    if analysis is None:
+        raise HTTPException(status_code=404, detail=f"Analysis {analysis_id} not found.")
+    brief = generate_brief(analysis)
+    db.save_brief(DB_PATH, analysis_id, brief)
+    return brief
+
+
+@app.get("/analyses/{analysis_id}/brief")
+def get_brief(analysis_id: int) -> dict:
+    """Return the brief for an analysis, generating and storing it on first request."""
+    return _get_or_generate_brief(analysis_id)
+
+
+@app.post("/analyses/{analysis_id}/brief")
+def regenerate_brief(analysis_id: int) -> dict:
+    """Force regeneration of the brief (stored as a new brief record)."""
+    return _get_or_generate_brief(analysis_id, regenerate=True)
+
+
+@app.get("/analyses/{analysis_id}/brief/markdown")
+def export_brief_markdown(analysis_id: int) -> PlainTextResponse:
+    brief = _get_or_generate_brief(analysis_id)
+    return PlainTextResponse(
+        brief_to_markdown(brief),
+        media_type="text/markdown; charset=utf-8",
+        headers={
+            "Content-Disposition": f'attachment; filename="review-brief-analysis-{analysis_id}.md"'
+        },
+    )
+
+
+@app.get("/analyses/{analysis_id}/brief/html")
+def export_brief_html(analysis_id: int) -> HTMLResponse:
+    brief = _get_or_generate_brief(analysis_id)
+    return HTMLResponse(brief_to_html(brief))
 
 
 def _analyze(data: bytes, source_name: str) -> dict:

@@ -1,10 +1,10 @@
 # AdvisorLens
 
 AdvisorLens is an AI-assisted **portfolio review support tool for financial advisors**.
-Phase 1 lets a user upload (or pick) a **synthetic** portfolio CSV, runs **deterministic
-analysis rules**, shows a dashboard of summary metrics and advisor review items, and
-stores every analysis with an audit trail — preparing the data foundation for a future
-AI-generated Client Portfolio Review Brief.
+Upload (or pick) a **synthetic** portfolio CSV, run **deterministic analysis rules**, review
+a dashboard of summary metrics and advisor review items, browse saved analyses, and generate
+an advisor-presentable **Client Portfolio Review Brief** with Markdown and HTML export.
+Every analysis is stored with an audit trail.
 
 > **Compliance posture**
 > - Synthetic sample data only — no real client data, no brokerage connections, no market data APIs.
@@ -23,11 +23,13 @@ AI-generated Client Portfolio Review Brief.
 | Frontend  | Next.js 16 (App Router) + Tailwind CSS 4 |
 | Backend   | FastAPI (Python 3.11)                     |
 | Analytics | Pandas                                    |
-| Storage   | SQLite (analyses + append-only audit log) |
-| Tests     | pytest (52 tests)                         |
+| Storage   | SQLite (analyses + briefs + append-only audit log) |
+| Tests     | pytest (68 tests)                         |
 
-shadcn/ui, Markdown/HTML brief export, and integrations (FMP/Plaid/SnapTrade/Langfuse)
-are deliberately deferred beyond Phase 1.
+shadcn/ui, PDF export, and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately
+deferred. The brief generator is deterministic in Phase 2 and designed so an LLM-backed
+generator can be plugged in later (`backend/app/brief.py` `GENERATORS`) without external
+API keys today.
 
 ## Project structure
 
@@ -36,13 +38,14 @@ backend/
   app/
     ingestion.py    # CSV parsing + validation (schema, numerics, enums)
     analytics.py    # total value, asset/sector allocation, top holdings, unrealized G/L
-    rules.py        # deterministic risk rules -> Flags with evidence + thresholds
-    compliance.py   # banned-phrase guard applied to every generated flag
-    db.py           # SQLite: analyses + audit_log
+    rules.py        # deterministic review rules -> Flags with evidence + thresholds
+    compliance.py   # banned-phrase guard applied to every generated flag and brief
+    brief.py        # Client Portfolio Review Brief generator + Markdown/HTML rendering
+    db.py           # SQLite: analyses + briefs + audit_log
     service.py      # ingest -> summarize -> rules -> persist pipeline
     main.py         # FastAPI endpoints
   tests/            # pytest suite
-frontend/           # Next.js dashboard (sample picker, upload, summary, flags)
+frontend/           # Next.js dashboard (analyze, saved-analyses history, review brief)
 data/samples/       # 3 synthetic portfolio CSVs
 ```
 
@@ -59,7 +62,7 @@ ticker,security_name,asset_class,sector,shares,market_value,cost_basis,account_t
 - `risk_tolerance`: Conservative, Moderate, Aggressive
 - Market value is the authoritative amount; percentages are of total portfolio market value.
 
-## Deterministic rules (Phase 1)
+## Five advisor review rules plus one compliance guardrail
 
 | rule_id                        | Trigger                                              | Severity |
 |--------------------------------|------------------------------------------------------|----------|
@@ -67,10 +70,11 @@ ticker,security_name,asset_class,sector,shares,market_value,cost_basis,account_t
 | `concentration_sector`         | Any non-cash sector > 35% of portfolio               | medium   |
 | `cash_drag`                    | Cash > 10% of portfolio                              | medium   |
 | `risk_tolerance_mismatch`      | Conservative profile with equity > 60% of portfolio  | high     |
-| `tax_review_taxable_loss`      | Unrealized loss in a **taxable** account             | info     |
+| `tax_review_taxable_loss`      | Unrealized loss in a **taxable** account (surfaced as a "tax-related review consideration") | info |
 
-Retirement accounts never trigger tax-loss review language — enforced in the rule,
-re-checked by the compliance guard, and covered by tests.
+**Compliance guardrail (not a user-facing review flag):** retirement accounts never
+receive tax review language — enforced inside the rule, re-checked by the runtime
+compliance guard, and covered by tests.
 
 ## Sample portfolios
 
@@ -104,8 +108,12 @@ API without the frontend:
 
 ```bash
 curl -X POST localhost:8000/analyze/sample/growth_concentrated.csv
-curl localhost:8000/analyses          # saved analyses
-curl localhost:8000/analyses/1        # full record incl. audit log
+curl localhost:8000/analyses                       # saved analyses
+curl localhost:8000/analyses/1                     # full record incl. audit log
+curl localhost:8000/analyses/1/brief               # generate/view review brief (cached)
+curl -X POST localhost:8000/analyses/1/brief       # force regenerate
+curl localhost:8000/analyses/1/brief/markdown      # Markdown export (download)
+curl localhost:8000/analyses/1/brief/html          # printable HTML export
 ```
 
 Tests:
@@ -114,16 +122,32 @@ Tests:
 cd backend && .venv/bin/python -m pytest
 ```
 
+## Client Portfolio Review Brief
+
+Generated per analysis (`GET /analyses/{id}/brief`, cached in SQLite; `POST` regenerates)
+with nine sections: Executive Summary, Portfolio Snapshot, Key Review Items, Advisor
+Talking Points, Client Discussion Questions, Follow-Up Items, Evidence Table, Data
+Assumptions, and Compliance Disclaimer.
+
+Grounding guarantees (tested):
+- Built **only** from the stored analysis record — summary, flags, evidence, and audit
+  metadata. Review items in the brief are exactly the stored flags, in order.
+- Every review item and evidence row carries its rule ID and threshold.
+- All brief text passes the banned-phrase compliance guard at generation time.
+- Tax items use "tax-related review consideration" wording, and the brief states it is
+  not tax, legal, or investment advice.
+
 ## Storage & audit
 
 Each analysis is saved to SQLite (`backend/advisorlens.db`, created on first run) with the
 source filename, file SHA-256, engine version, client profile, full summary, and all flags.
-An append-only `audit_log` records completion events (including which rules fired) and
-rejected ingestions with their validation errors.
+Generated briefs are stored in a `briefs` table. An append-only `audit_log` records
+completion events (including which rules fired), brief generations, and rejected
+ingestions with their validation errors.
 
-## Phase 2 candidates (not built)
+## Phase 3 candidates (not built)
 
-- AI-generated Client Portfolio Review Brief (Markdown/HTML export first, PDF later)
-- shadcn/ui component polish, saved-analyses history view in the UI
-- Real market data (FMP), account aggregation (Plaid/SnapTrade), LLM observability (Langfuse)
+- LLM-backed brief generator registered alongside the deterministic one (Langfuse observability)
+- PDF export, shadcn/ui component polish
+- Real market data (FMP), account aggregation (Plaid/SnapTrade)
 - Authentication and multi-user support

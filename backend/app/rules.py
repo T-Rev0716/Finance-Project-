@@ -178,9 +178,9 @@ def rule_risk_tolerance_mismatch(portfolio: Portfolio) -> list[Flag]:
 def rule_taxable_unrealized_loss(portfolio: Portfolio) -> list[Flag]:
     """Unrealized losses held in taxable accounts only.
 
-    Retirement accounts are explicitly excluded: realized losses inside
-    tax-advantaged accounts are not deductible, so tax-loss review language
-    must never attach to them.
+    Compliance guardrail: retirement accounts are explicitly excluded —
+    realized losses inside tax-advantaged accounts are not deductible, so
+    tax review language must never attach to them.
     """
     df = portfolio.holdings
     taxable_losses = df[(~df["is_retirement_account"]) & (df["unrealized_gain_loss"] < 0)]
@@ -195,8 +195,9 @@ def rule_taxable_unrealized_loss(portfolio: Portfolio) -> list[Flag]:
                 message=(
                     f"{row.security_name} ({row.ticker}) in a {row.account_type} account shows an "
                     f"unrealized loss of ${abs(row.unrealized_gain_loss):,.2f}. This may indicate a "
-                    "tax-loss review opportunity; consider evaluating it with the client and a tax "
-                    "professional. This is a data observation, not tax or investment advice."
+                    "tax-related review consideration; consider evaluating it with the client and a "
+                    "qualified tax professional. This is a data observation, not tax, legal, or "
+                    "investment advice."
                 ),
                 threshold="account is taxable and market_value < cost_basis",
                 evidence={

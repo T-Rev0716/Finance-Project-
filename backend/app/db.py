@@ -38,6 +38,14 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS briefs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    analysis_id INTEGER NOT NULL REFERENCES analyses(id),
+    created_at TEXT NOT NULL,
+    generator TEXT NOT NULL,
+    engine_version TEXT NOT NULL,
+    brief_json TEXT NOT NULL
+);
 """
 
 
@@ -117,6 +125,37 @@ def log_event(db_path: Path | str, analysis_id: int | None, event: str, detail: 
             "INSERT INTO audit_log (analysis_id, event, detail_json, created_at) VALUES (?, ?, ?, ?)",
             (analysis_id, event, json.dumps(detail), _now()),
         )
+
+
+def save_brief(db_path: Path | str, analysis_id: int, brief: dict) -> int:
+    with _connect(db_path) as conn:
+        cur = conn.execute(
+            """
+            INSERT INTO briefs (analysis_id, created_at, generator, engine_version, brief_json)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (analysis_id, _now(), brief["generator"], brief["engine_version"], json.dumps(brief)),
+        )
+        brief_id = int(cur.lastrowid)
+        conn.execute(
+            "INSERT INTO audit_log (analysis_id, event, detail_json, created_at) VALUES (?, ?, ?, ?)",
+            (
+                analysis_id,
+                "brief_generated",
+                json.dumps({"brief_id": brief_id, "generator": brief["generator"]}),
+                _now(),
+            ),
+        )
+    return brief_id
+
+
+def get_latest_brief(db_path: Path | str, analysis_id: int) -> dict | None:
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT brief_json FROM briefs WHERE analysis_id = ? ORDER BY id DESC LIMIT 1",
+            (analysis_id,),
+        ).fetchone()
+    return json.loads(row["brief_json"]) if row else None
 
 
 def list_analyses(db_path: Path | str, limit: int = 20) -> list[dict]:

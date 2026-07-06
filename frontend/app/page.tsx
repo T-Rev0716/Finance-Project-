@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import BriefView from "@/components/BriefView";
+import HistoryView from "@/components/HistoryView";
 import {
   AllocationItem,
   AnalysisResult,
@@ -10,6 +12,7 @@ import {
   analyzeUpload,
   fetchSamples,
   formatMoney,
+  getAnalysis,
 } from "@/lib/api";
 
 const SEVERITY_STYLES: Record<Flag["severity"], string> = {
@@ -23,6 +26,7 @@ export default function Home() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<"analyze" | "history">("analyze");
 
   useEffect(() => {
     fetchSamples()
@@ -37,6 +41,7 @@ export default function Home() {
     setError(null);
     try {
       setResult(await action());
+      setTab("analyze");
     } catch (e) {
       setResult(null);
       setError(e instanceof Error ? e.message : "Analysis failed.");
@@ -48,16 +53,36 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b bg-white">
-        <div className="mx-auto max-w-5xl px-6 py-5">
-          <h1 className="text-2xl font-semibold">AdvisorLens</h1>
-          <p className="text-sm text-slate-500">
-            Portfolio review support for advisors — synthetic data only, deterministic rules only.
-          </p>
+        <div className="mx-auto flex max-w-5xl flex-wrap items-end justify-between gap-3 px-6 py-5">
+          <div>
+            <h1 className="text-2xl font-semibold">AdvisorLens</h1>
+            <p className="text-sm text-slate-500">
+              Portfolio review support for advisors — synthetic data only, deterministic rules
+              only.
+            </p>
+          </div>
+          <nav className="flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
+            {(["analyze", "history"] as const).map((name) => (
+              <button
+                key={name}
+                onClick={() => setTab(name)}
+                className={`rounded-md px-3 py-1 text-sm font-medium capitalize ${
+                  tab === name ? "bg-white shadow-sm" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {name}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-6">
-        <section className="rounded-lg border bg-white p-5">
+        {tab === "history" && (
+          <HistoryView opening={loading} onOpen={(id) => run(() => getAnalysis(id))} />
+        )}
+
+        <section className={`rounded-lg border bg-white p-5 ${tab !== "analyze" ? "hidden" : ""}`}>
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Analyze a portfolio
           </h2>
@@ -85,7 +110,12 @@ export default function Home() {
                 }}
               />
             </label>
-            {loading && <span className="text-sm text-slate-500">Analyzing…</span>}
+            {loading && (
+              <span className="flex items-center gap-2 text-sm text-slate-500">
+                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+                Analyzing…
+              </span>
+            )}
           </div>
           {error && (
             <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -94,7 +124,7 @@ export default function Home() {
           )}
         </section>
 
-        {result && <Results result={result} />}
+        {tab === "analyze" && result && <Results result={result} />}
       </main>
     </div>
   );
@@ -210,6 +240,8 @@ function Results({ result }: { result: AnalysisResult }) {
           </tbody>
         </table>
       </section>
+
+      <BriefView key={result.analysis_id} analysisId={result.analysis_id} />
 
       <p className="rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-500">
         {result.disclaimer}

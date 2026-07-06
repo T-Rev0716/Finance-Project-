@@ -76,3 +76,50 @@ def test_upload_invalid_csv_is_422_and_audited(client):
 
 def test_missing_analysis_404(client):
     assert client.get("/analyses/12345").status_code == 404
+
+
+def test_brief_endpoint_generates_and_caches(client):
+    analysis_id = client.post("/analyze/sample/conservative_mismatch.csv").json()["analysis_id"]
+
+    first = client.get(f"/analyses/{analysis_id}/brief")
+    assert first.status_code == 200
+    body = first.json()
+    assert body["analysis_id"] == analysis_id
+    assert list(body["sections"].keys())[0] == "executive_summary"
+
+    # Second GET returns the stored brief (same generated_at), POST regenerates.
+    second = client.get(f"/analyses/{analysis_id}/brief").json()
+    assert second["generated_at"] == body["generated_at"]
+    regenerated = client.post(f"/analyses/{analysis_id}/brief").json()
+    assert regenerated["sections"] == body["sections"]
+
+    # Brief generation is recorded in the audit log.
+    detail = client.get(f"/analyses/{analysis_id}").json()
+    events = [e["event"] for e in detail["audit_log"]]
+    assert events.count("brief_generated") >= 2
+
+
+def test_brief_markdown_export(client):
+    analysis_id = client.post("/analyze/sample/growth_concentrated.csv").json()["analysis_id"]
+    response = client.get(f"/analyses/{analysis_id}/brief/markdown")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/markdown")
+    assert "attachment" in response.headers["content-disposition"]
+    assert response.text.startswith("# Client Portfolio Review Brief")
+    assert "## Compliance Disclaimer" in response.text
+
+
+def test_brief_html_export(client):
+    analysis_id = client.post("/analyze/sample/retiree_cash_drag.csv").json()["analysis_id"]
+    response = client.get(f"/analyses/{analysis_id}/brief/html")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.text.startswith("<!DOCTYPE html>")
+    assert "<h2>Evidence Table</h2>" in response.text
+
+
+def test_brief_endpoints_404_for_missing_analysis(client):
+    assert client.get("/analyses/999/brief").status_code == 404
+    assert client.post("/analyses/999/brief").status_code == 404
+    assert client.get("/analyses/999/brief/markdown").status_code == 404
+    assert client.get("/analyses/999/brief/html").status_code == 404
