@@ -3,8 +3,8 @@
 AdvisorLens is an AI-assisted **portfolio review support tool for financial advisors**.
 Upload (or pick) a **synthetic** portfolio CSV, run **deterministic analysis rules**, review
 a dashboard of summary metrics and advisor review items, browse saved analyses, and generate
-an advisor-presentable **Client Portfolio Review Brief** with Markdown and HTML export.
-Every analysis is stored with an audit trail.
+an advisor-presentable **Client Portfolio Review Brief** with Markdown, HTML, and
+print-ready PDF export. Every analysis is stored with an audit trail.
 
 > **Compliance posture**
 > - Synthetic sample data only — no real client data, no brokerage connections, no market data APIs.
@@ -24,12 +24,12 @@ Every analysis is stored with an audit trail.
 | Backend   | FastAPI (Python 3.11)                     |
 | Analytics | Pandas                                    |
 | Storage   | SQLite (analyses + briefs + append-only audit log) |
-| Tests     | pytest (68 tests)                         |
+| PDF export| Headless Chromium via Playwright (renders the same HTML template) |
+| Tests     | pytest (82 tests)                         |
 
-shadcn/ui, PDF export, and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately
-deferred. The brief generator is deterministic in Phase 2 and designed so an LLM-backed
-generator can be plugged in later (`backend/app/brief.py` `GENERATORS`) without external
-API keys today.
+shadcn/ui and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately deferred. The
+brief generator is deterministic in Phase 2 and designed so an LLM-backed generator can
+be plugged in later (`backend/app/brief.py` `GENERATORS`) without external API keys today.
 
 ## Project structure
 
@@ -41,6 +41,7 @@ backend/
     rules.py        # deterministic review rules -> Flags with evidence + thresholds
     compliance.py   # banned-phrase guard applied to every generated flag and brief
     brief.py        # Client Portfolio Review Brief generator + Markdown/HTML rendering
+    pdf_export.py   # renders the brief's HTML export to PDF via headless Chromium
     db.py           # SQLite: analyses + briefs + audit_log
     service.py      # ingest -> summarize -> rules -> persist pipeline
     main.py         # FastAPI endpoints
@@ -114,7 +115,13 @@ curl localhost:8000/analyses/1/brief               # generate/view review brief 
 curl -X POST localhost:8000/analyses/1/brief       # force regenerate
 curl localhost:8000/analyses/1/brief/markdown      # Markdown export (download)
 curl localhost:8000/analyses/1/brief/html          # printable HTML export
+curl localhost:8000/analyses/1/brief/pdf -o brief.pdf   # PDF export (download)
 ```
+
+PDF export renders the same HTML template through headless Chromium (via Playwright),
+so the two stay visually consistent by construction. It needs a Chromium binary — run
+`playwright install chromium` after installing requirements, or set
+`ADVISORLENS_CHROMIUM_PATH` to point at one already installed elsewhere.
 
 Tests:
 
@@ -138,8 +145,9 @@ Grounding guarantees (tested):
   not tax, legal, or investment advice.
 
 The History tab lists every saved analysis with a Generated / Not generated brief status
-badge, plus Open, View Brief, Export Markdown, and Export HTML actions per row — briefs
-generate on first request if one doesn't exist yet.
+badge, plus Open, a Generate Brief / View Brief action (label reflects that status), and
+Export Markdown / Export HTML / Export PDF actions per row — every export generates the
+brief on first request if one doesn't exist yet.
 
 ## Storage & audit
 
@@ -149,9 +157,9 @@ Generated briefs are stored in a `briefs` table. An append-only `audit_log` reco
 completion events (including which rules fired), brief generations, and rejected
 ingestions with their validation errors.
 
-## Phase 3 candidates (not built)
+## Phase 3B+ candidates (not built)
 
 - LLM-backed brief generator registered alongside the deterministic one (Langfuse observability)
-- PDF export, shadcn/ui component polish
+- shadcn/ui component polish
 - Real market data (FMP), account aggregation (Plaid/SnapTrade)
 - Authentication and multi-user support

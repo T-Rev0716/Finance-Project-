@@ -159,7 +159,8 @@ def rule_risk_tolerance_mismatch(portfolio: Portfolio) -> list[Flag]:
                 f"The client's stated risk tolerance is Conservative, but equities represent "
                 f"{_pct(weight)}% of the portfolio, above the {_pct(CONSERVATIVE_EQUITY_MAX_WEIGHT)}% "
                 "review threshold for conservative profiles. This may indicate a mismatch between the "
-                "portfolio and the client's risk profile; consider reviewing allocation with the client."
+                "portfolio and the client's risk profile; consider discussing whether the allocation "
+                "profile remains aligned with the client's stated risk tolerance."
             ),
             threshold=(
                 f"risk_tolerance == Conservative and equity > "

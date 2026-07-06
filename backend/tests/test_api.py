@@ -1,7 +1,10 @@
+import io
+
 import pytest
 from fastapi.testclient import TestClient
+from pypdf import PdfReader
 
-from app import main
+from app import compliance, main
 
 
 @pytest.fixture
@@ -118,11 +121,63 @@ def test_brief_html_export(client):
     assert "<h2>Evidence Table</h2>" in response.text
 
 
+def _pdf_text(response) -> str:
+    reader = PdfReader(io.BytesIO(response.content))
+    return "\n".join(page.extract_text() for page in reader.pages)
+
+
+def test_brief_pdf_export(client):
+    analysis_id = client.post("/analyze/sample/conservative_mismatch.csv").json()["analysis_id"]
+    response = client.get(f"/analyses/{analysis_id}/brief/pdf")
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert "attachment" in response.headers["content-disposition"]
+    assert f"analysis-{analysis_id}.pdf" in response.headers["content-disposition"]
+    assert response.content.startswith(b"%PDF")
+
+
+def test_brief_pdf_export_auto_generates_missing_brief(client):
+    """Exports must auto-generate (and persist) a brief if one doesn't exist yet."""
+    analysis_id = client.post("/analyze/sample/growth_concentrated.csv").json()["analysis_id"]
+    before = client.get("/analyses").json()["analyses"][0]
+    assert before["has_brief"] is False
+
+    response = client.get(f"/analyses/{analysis_id}/brief/pdf")
+    assert response.status_code == 200
+
+    after = client.get("/analyses").json()["analyses"][0]
+    assert after["has_brief"] is True
+
+
+def test_brief_pdf_export_contains_report_metadata(client):
+    analysis_id = client.post("/analyze/sample/conservative_mismatch.csv").json()["analysis_id"]
+    text = _pdf_text(client.get(f"/analyses/{analysis_id}/brief/pdf"))
+
+    assert "Client Portfolio Review Brief" in text
+    assert "Analysis ID" in text
+    assert str(analysis_id) in text
+    assert "conservative_mismatch.csv" in text
+    assert "Engine version" in text
+    assert "deterministic-v1" in text
+    assert "Compliance Disclaimer" in text
+    assert "not tax, legal, or investment advice" in text
+    assert "risk_tolerance_mismatch" in text
+    assert "tax_review_taxable_loss" in text
+    assert "Evidence Table" in text
+
+
+def test_brief_pdf_export_no_banned_phrases(client):
+    analysis_id = client.post("/analyze/sample/growth_concentrated.csv").json()["analysis_id"]
+    text = _pdf_text(client.get(f"/analyses/{analysis_id}/brief/pdf"))
+    assert compliance.find_violations(text) == []
+
+
 def test_brief_endpoints_404_for_missing_analysis(client):
     assert client.get("/analyses/999/brief").status_code == 404
     assert client.post("/analyses/999/brief").status_code == 404
     assert client.get("/analyses/999/brief/markdown").status_code == 404
     assert client.get("/analyses/999/brief/html").status_code == 404
+    assert client.get("/analyses/999/brief/pdf").status_code == 404
 
 
 def test_list_analyses_reflects_brief_generation(client):

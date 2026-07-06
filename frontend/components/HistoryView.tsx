@@ -101,7 +101,7 @@ export default function HistoryView({
                       disabled={opening}
                       className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100 disabled:opacity-50"
                     >
-                      View Brief
+                      {a.has_brief ? "View Brief" : "Generate Brief"}
                     </button>
                     <a
                       href={briefExportUrl(a.id, "markdown")}
@@ -116,6 +116,12 @@ export default function HistoryView({
                       className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100"
                     >
                       Export HTML
+                    </a>
+                    <a
+                      href={briefExportUrl(a.id, "pdf")}
+                      className="rounded-md border border-slate-300 px-2.5 py-1 text-xs font-medium hover:bg-slate-100"
+                    >
+                      Export PDF
                     </a>
                   </div>
                 </td>

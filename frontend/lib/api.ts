@@ -156,7 +156,7 @@ export async function getBrief(analysisId: number): Promise<Brief> {
   return res.json();
 }
 
-export function briefExportUrl(analysisId: number, format: "markdown" | "html"): string {
+export function briefExportUrl(analysisId: number, format: "markdown" | "html" | "pdf"): string {
   return `${API_BASE}/analyses/${analysisId}/brief/${format}`;
 }
 

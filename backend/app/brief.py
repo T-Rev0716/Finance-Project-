@@ -395,12 +395,12 @@ _HTML_STYLE = """
   .evidence-item ul { margin: .4rem 0 0; font-family: ui-monospace, Menlo, monospace;
                        font-size: .78rem; color: #4a5568; }
   .review-item { border-left: 3px solid #cbd5e0; padding: .2rem 0 .2rem 1rem; margin: 1.2rem 0; }
-  .review-item.severity-high { border-left-color: #9b2c2c; }
-  .review-item.severity-medium { border-left-color: #975a16; }
-  .review-item.severity-info { border-left-color: #2b6cb0; }
-  .severity-high { color: #9b2c2c; font-weight: bold; }
-  .severity-medium { color: #975a16; font-weight: bold; }
-  .severity-info { color: #2b6cb0; font-weight: bold; }
+  .review-item.sev-high { border-left-color: #9b2c2c; }
+  .review-item.sev-medium { border-left-color: #975a16; }
+  .review-item.sev-info { border-left-color: #2b6cb0; }
+  .severity-label-high { color: #9b2c2c; font-weight: bold; }
+  .severity-label-medium { color: #975a16; font-weight: bold; }
+  .severity-label-info { color: #2b6cb0; font-weight: bold; }
   .disclaimer { border: 1px solid #cbd5e0; background: #f7fafc; border-radius: 6px;
                 padding: 1rem 1.1rem; font-size: .85rem; margin-top: 1rem; }
   code { background: #edf2f7; padding: .1rem .3rem; border-radius: 3px; font-size: .85em; }
@@ -408,8 +408,11 @@ _HTML_STYLE = """
     body { margin: 0; max-width: none; padding: 0 .3in; }
     @page { margin: 0.6in; }
     h2 { page-break-after: avoid; }
-    h3, .evidence-item, .review-item, tr { page-break-inside: avoid; }
+    h3, .evidence-item, .review-item, tr, .report-meta, .disclaimer {
+      page-break-inside: avoid;
+    }
     table { page-break-inside: auto; }
+    thead { display: table-header-group; }
     a { color: inherit; text-decoration: none; }
   }
 """
@@ -432,8 +435,9 @@ def _html_alloc_table(rows: list[dict], label: str) -> str:
         for r in rows
     )
     return (
-        f"<h3>{_esc(label)}</h3><table><tr><th>Name</th><th>Value</th><th>Weight</th></tr>"
-        f"{body}</table>"
+        f"<h3>{_esc(label)}</h3><table>"
+        "<thead><tr><th>Name</th><th>Value</th><th>Weight</th></tr></thead>"
+        f"<tbody>{body}</tbody></table>"
     )
 
 
@@ -465,22 +469,23 @@ def brief_to_html(brief: dict) -> str:
         "</ul>",
         _html_alloc_table(snap["asset_allocation"], "Asset allocation"),
         _html_alloc_table(snap["sector_allocation"], "Sector allocation"),
-        "<h3>Top holdings</h3><table><tr><th>Ticker</th><th>Name</th><th>Value</th>"
-        "<th>Weight</th><th>Unrealized G/L</th></tr>",
+        "<h3>Top holdings</h3><table>"
+        "<thead><tr><th>Ticker</th><th>Name</th><th>Value</th>"
+        "<th>Weight</th><th>Unrealized G/L</th></tr></thead><tbody>",
         *[
             f"<tr><td>{_esc(h['ticker'])}</td><td>{_esc(h['security_name'])}</td>"
             f"<td>{_money(h['market_value'])}</td><td>{h['weight_pct']}%</td>"
             f"<td>{_money(h['unrealized_gain_loss'])}</td></tr>"
             for h in snap["top_holdings"]
         ],
-        "</table>",
+        "</tbody></table>",
         f"<h2>{SECTION_TITLES['key_review_items']}</h2>",
     ]
     if s["key_review_items"]:
         for item in s["key_review_items"]:
             parts += [
-                f"<div class='review-item severity-{_esc(item['severity'])}'>",
-                f"<h3><span class='severity-{_esc(item['severity'])}'>"
+                f"<div class='review-item sev-{_esc(item['severity'])}'>",
+                f"<h3><span class='severity-label-{_esc(item['severity'])}'>"
                 f"[{_esc(item['severity'].upper())}]</span> {_esc(item['title'])} "
                 f"<code>{_esc(item['rule_id'])}</code></h3>",
                 f"<p>{_esc(item['message'])}</p>",

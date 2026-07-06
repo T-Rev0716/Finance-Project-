@@ -180,6 +180,26 @@ def test_html_print_media_rules_present(mismatch_brief):
     assert "page-break-inside: avoid" in html
 
 
+def test_html_tables_repeat_header_across_page_breaks(mismatch_brief):
+    html = brief_to_html(mismatch_brief)
+    # thead/display:table-header-group is what makes Chromium repeat a table's
+    # header row on every printed page instead of splitting it off page 1.
+    assert "<thead>" in html
+    assert "<tbody>" in html
+    assert "thead { display: table-header-group; }" in html
+
+
+def test_html_severity_color_scoped_to_label_not_whole_card(mismatch_brief):
+    html = brief_to_html(mismatch_brief)
+    # Regression: severity color/bold must not leak onto the review-item div
+    # itself (which would recolor its whole message via inheritance). The
+    # label span and the card wrapper must use distinct classes.
+    assert "severity-label-high" in html
+    assert "class='review-item sev-high'" in html
+    assert "class='review-item severity-high'" not in html
+    assert ".severity-high { color:" not in html
+
+
 def test_brief_is_deterministic_apart_from_timestamp(tmp_path):
     csv_bytes = (SAMPLES_DIR / "growth_concentrated.csv").read_bytes()
     analysis = _analysis_for(tmp_path, csv_bytes, "growth_concentrated.csv")

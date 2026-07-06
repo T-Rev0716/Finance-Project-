@@ -157,6 +157,12 @@ def test_conservative_high_equity_triggers():
     assert len(flags) == 1
     assert flags[0].evidence["equity_weight_pct"] == 70.0
     assert flags[0].severity == "high"
+    # Wording policy: softened phrasing, not the old "reviewing allocation with the client."
+    assert (
+        "consider discussing whether the allocation profile remains aligned with the "
+        "client's stated risk tolerance" in flags[0].message
+    )
+    assert "reviewing allocation with the client" not in flags[0].message
 
 
 def test_moderate_high_equity_does_not_trigger():

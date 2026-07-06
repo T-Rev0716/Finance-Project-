@@ -9,11 +9,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
 from . import ENGINE_VERSION, db
 from .brief import brief_to_html, brief_to_markdown, generate_brief
 from .ingestion import IngestionError
+from .pdf_export import PdfRenderError, html_to_pdf_bytes
 from .service import analyze_csv
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -115,6 +116,22 @@ def export_brief_markdown(analysis_id: int) -> PlainTextResponse:
 def export_brief_html(analysis_id: int) -> HTMLResponse:
     brief = _get_or_generate_brief(analysis_id)
     return HTMLResponse(brief_to_html(brief))
+
+
+@app.get("/analyses/{analysis_id}/brief/pdf")
+def export_brief_pdf(analysis_id: int) -> Response:
+    brief = _get_or_generate_brief(analysis_id)
+    try:
+        pdf_bytes = html_to_pdf_bytes(brief_to_html(brief))
+    except PdfRenderError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="review-brief-analysis-{analysis_id}.pdf"'
+        },
+    )
 
 
 def _analyze(data: bytes, source_name: str) -> dict:

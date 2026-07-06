@@ -78,6 +78,12 @@ export default function BriefView({
               >
                 Export HTML
               </a>
+              <a
+                href={briefExportUrl(analysisId, "pdf")}
+                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium hover:bg-slate-100"
+              >
+                Export PDF
+              </a>
             </>
           )}
         </div>
