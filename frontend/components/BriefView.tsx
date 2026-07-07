@@ -152,8 +152,8 @@ function BriefBody({ brief }: { brief: Brief }) {
     <div className="mt-5 space-y-6 text-sm">
       {brief.generator === FALLBACK_GENERATOR && (
         <p className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-          Generated with deterministic fallback — the LLM draft was unavailable or did not pass
-          validation, so the rule-based brief is shown instead.
+          Generated with rule-based fallback because the LLM draft was unavailable or failed
+          validation.
         </p>
       )}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 sm:grid-cols-4">

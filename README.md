@@ -26,7 +26,7 @@ print-ready PDF export. Every analysis is stored with an audit trail.
 | Storage   | SQLite (analyses + briefs + append-only audit log) |
 | PDF export| Headless Chromium via Playwright (renders the same HTML template) |
 | LLM (optional) | OpenAI-compatible `/chat/completions` provider behind the `GENERATORS` registry |
-| Tests     | pytest (108 tests)                        |
+| Tests     | pytest (112 tests)                        |
 
 shadcn/ui and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately deferred. The
 brief generator is deterministic by default; an optional LLM generator (`llm-v1`) drafts
@@ -188,7 +188,32 @@ Grounding and safety (all tested):
 - Any provider error, invalid JSON, or validation failure falls back safely to the
   deterministic brief, stored as `deterministic-fallback-after-llm-failure` with the reason
   in `generator_metadata` and in the audit log (prompt version only — never prompt text or
-  keys). The UI shows a subtle "Generated with deterministic fallback" note.
+  keys). The UI shows a subtle rule-based-fallback note and never surfaces raw provider
+  errors, prompts, or validation internals.
+- The fact-token guard accepts figures rounded to fewer decimals than the packet value
+  (a model writing "57%" for 57.22 is fine); values no packet number rounds to still fail.
+
+### Verifying llm-v1 against a real endpoint
+
+`backend/scripts/verify_llm_live.py` runs one LLM-backed brief generation on synthetic
+sample data and checks every guarantee end to end: generator is `llm-v1`, model metadata,
+exact rule-ID mapping, evidence table identical to the deterministic generator's,
+disclaimer present, no banned phrases, and Markdown/HTML/PDF exports (with PDF text
+extraction). It is CI-safe — with no provider configured it prints SKIPPED and exits 0
+(`--strict` exits 1) — and it never prints or stores the API key.
+
+```bash
+cd backend
+export ADVISORLENS_LLM_PROVIDER=openai-compatible
+export ADVISORLENS_LLM_MODEL=<model>                # e.g. a Hermes/GPT-class model
+export ADVISORLENS_LLM_API_KEY=<key>                # from your shell, never committed
+export ADVISORLENS_LLM_BASE_URL=<https://.../v1>    # optional; OpenAI default
+.venv/bin/python scripts/verify_llm_live.py         # add --skip-pdf for a faster run
+```
+
+Keyless demo of the identical pipeline: `ADVISORLENS_LLM_PROVIDER=mock
+.venv/bin/python scripts/verify_llm_live.py`. A fallback brief counts as verification
+FAILURE (exit 1) so a misconfigured endpoint can't silently look green.
 
 ## Storage & audit
 
@@ -198,10 +223,12 @@ Generated briefs are stored in a `briefs` table. An append-only `audit_log` reco
 completion events (including which rules fired), brief generations, and rejected
 ingestions with their validation errors.
 
-## Phase 3C+ candidates (not built)
+## Phase 3D+ candidates (not built)
 
-- Real provider verification against a live LLM endpoint; an Anthropic-native provider
-- LLM observability (Langfuse) and prompt iteration
+- An actual live run of `scripts/verify_llm_live.py` with real credentials (the tooling
+  exists; no keys are present in the development environment)
+- An Anthropic-native provider
+- LLM observability (Langfuse) and further prompt iteration from live outputs
 - shadcn/ui component polish
 - Real market data (FMP), account aggregation (Plaid/SnapTrade)
 - Authentication and multi-user support

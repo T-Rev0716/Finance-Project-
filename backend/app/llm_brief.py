@@ -25,7 +25,7 @@ import re
 from . import compliance
 from .brief import _deterministic_brief
 
-PROMPT_VERSION = "brief-prompt-v1"
+PROMPT_VERSION = "brief-prompt-v2"
 
 NARRATIVE_KEYS = [
     "executive_summary",
@@ -58,8 +58,12 @@ Hard rules:
   best investment, will outperform, should invest, tax-loss harvesting, harvest losses,
   execute trades, rebalance now, make changes to taxable positions.
 - Every dollar amount, percentage, and ticker you write must appear in the packet.
+  Copy numeric values exactly as they appear (rounding to fewer decimal places is
+  acceptable); never compute, convert, estimate, or introduce new figures.
 - Produce exactly one key review item per flag in the packet, in the same order, each
   carrying that flag's exact rule_id.
+- Do not refer to yourself, AI, language models, prompts, or the drafting process.
+- Write plain sentences only: no markdown, bullets, headers, or formatting inside strings.
 
 Return ONLY a JSON object (no prose, no code fences) with exactly these keys:
 {
@@ -99,6 +103,7 @@ def build_input_packet(analysis: dict) -> dict:
             "holdings_count": summary["holdings_count"],
             "asset_allocation": summary["asset_allocation"],
             "sector_allocation": summary["sector_allocation"],
+            "account_type_allocation": summary["account_type_allocation"],
             "top_holdings": summary["top_holdings"],
         },
         "flags": [
@@ -131,6 +136,25 @@ def _to_float(token: str) -> float:
     return float(token.replace("$", "").replace("%", "").replace(",", "").strip())
 
 
+def _token_decimals(token: str) -> int:
+    digits = token.replace("$", "").replace("%", "").replace(",", "").strip()
+    if "." in digits:
+        return len(digits.split(".", 1)[1])
+    return 0
+
+
+def _number_matches(token: str, numbers: set[float]) -> bool:
+    """A money/percent token matches if it equals a packet number, or if a
+    packet number rounds to it at the token's own precision — so narrative
+    like '57%' is accepted when the packet contains 57.22, while a value no
+    packet number rounds to (e.g. $999,999.99) still fails."""
+    value = _to_float(token)
+    if value in numbers:
+        return True
+    decimals = _token_decimals(token)
+    return any(round(n, decimals) == value for n in numbers)
+
+
 def _allowed_facts(packet: dict) -> tuple[set[float], set[str], set[str]]:
     """Every number, uppercase token, and snake_case identifier the packet contains."""
     blob = json.dumps(packet)
@@ -154,10 +178,10 @@ def find_fact_errors(texts: list[str], packet: dict) -> list[str]:
     errors: list[str] = []
     for text in texts:
         for token in _MONEY_RE.findall(text):
-            if _to_float(token) not in numbers:
+            if not _number_matches(token, numbers):
                 errors.append(f"dollar amount {token!r} does not appear in the analysis data")
         for token in _PERCENT_RE.findall(text):
-            if _to_float(token) not in numbers:
+            if not _number_matches(token, numbers):
                 errors.append(f"percentage {token!r} does not appear in the analysis data")
         for token in _UPPER_RE.findall(text):
             if token not in upper:

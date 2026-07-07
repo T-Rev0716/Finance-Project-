@@ -13,6 +13,10 @@ frontend/.next/
 frontend/out/
 frontend/next-env.d.ts
 
+# Env files (LLM credentials live in the shell or local env files, never in git)
+.env
+.env.*
+
 # Misc
 .DS_Store
 *.log

@@ -7,7 +7,12 @@ from pypdf import PdfReader
 
 from app import compliance, db, llm, main
 from app.brief import FALLBACK_GENERATOR, generate_brief, resolve_generator
-from app.llm_brief import build_input_packet, find_fact_errors, validate_llm_payload
+from app.llm_brief import (
+    PROMPT_VERSION,
+    build_input_packet,
+    find_fact_errors,
+    validate_llm_payload,
+)
 from app.service import analyze_csv
 from tests.conftest import SAMPLES_DIR
 
@@ -103,7 +108,7 @@ def test_mock_provider_success(monkeypatch, analysis):
     metadata = brief["generator_metadata"]
     assert metadata["provider"] == "mock"
     assert metadata["model"] == "mock-echo-1"
-    assert metadata["prompt_version"] == "brief-prompt-v1"
+    assert metadata["prompt_version"] == PROMPT_VERSION
     assert metadata["validation_status"] == "passed"
     assert metadata["fallback_reason"] is None
 
@@ -241,6 +246,28 @@ def test_fact_guard_accepts_packet_facts(analysis):
     assert find_fact_errors(texts, packet) == []
 
 
+def test_fact_guard_accepts_rounded_packet_numbers(analysis):
+    """A real model may round packet figures to fewer decimals — that must not
+    trigger fallback, while values no packet number rounds to still fail."""
+    packet = build_input_packet(analysis)
+    # Packet contains 70.0 (equity weight) and 250000.0 (total value).
+    assert find_fact_errors(["Equities are about 70% of the $250,000 portfolio."], packet) == []
+    # 12.0% weight rounded to whole percent.
+    assert find_fact_errors(["Healthcare represents roughly 12% of the portfolio."], packet) == []
+    # Values nothing in the packet rounds to must still be rejected.
+    assert find_fact_errors(["Equities are 71% of the portfolio."], packet) != []
+    assert find_fact_errors(["The portfolio totals $250,001."], packet) != []
+
+
+def test_packet_includes_account_type_allocation(analysis):
+    """Account types are legitimate facts a model may mention (e.g. Traditional
+    IRA) — the packet must carry them so the fact guard accepts IRA tokens."""
+    packet = build_input_packet(analysis)
+    names = {a["name"] for a in packet["summary"]["account_type_allocation"]}
+    assert "Traditional IRA" in names
+    assert find_fact_errors(["Several positions sit in the Traditional IRA account."], packet) == []
+
+
 def test_word_boundaries_in_llm_banned_list():
     assert compliance.find_llm_violations("Top holdings; the account holds shares.") == []
     assert compliance.find_llm_violations("You should hold this position.") == ["hold"]
@@ -285,7 +312,7 @@ def test_stored_brief_and_audit_include_llm_metadata(tmp_path, monkeypatch):
     assert success["generator"] == "llm-v1"
     assert success["provider"] == "mock"
     assert success["model"] == "mock-echo-1"
-    assert success["prompt_version"] == "brief-prompt-v1"
+    assert success["prompt_version"] == PROMPT_VERSION
     assert success["validation_status"] == "passed"
     assert fallback["generator"] == FALLBACK_GENERATOR
     assert fallback["validation_status"] == "failed"
@@ -363,6 +390,45 @@ def test_exports_work_for_llm_and_fallback_briefs(client, monkeypatch):
     assert FALLBACK_GENERATOR in text
     assert "risk_tolerance_mismatch" in text
     assert "not tax, legal, or investment advice" in text
+
+
+# --- Live-verification script: CI-safe skip and keyless mock pass ---
+
+
+def test_verify_script_skips_cleanly_without_provider(tmp_path):
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ADVISORLENS")}
+    proc = subprocess.run(
+        [sys.executable, "scripts/verify_llm_live.py", "--skip-pdf"],
+        capture_output=True, text=True, env=env, cwd=str(main.REPO_ROOT / "backend"),
+    )
+    assert proc.returncode == 0
+    assert "SKIPPED" in proc.stdout
+
+    strict = subprocess.run(
+        [sys.executable, "scripts/verify_llm_live.py", "--skip-pdf", "--strict"],
+        capture_output=True, text=True, env=env, cwd=str(main.REPO_ROOT / "backend"),
+    )
+    assert strict.returncode == 1
+
+
+def test_verify_script_passes_with_mock_provider():
+    import os
+    import subprocess
+    import sys
+
+    env = {k: v for k, v in os.environ.items() if not k.startswith("ADVISORLENS")}
+    env["ADVISORLENS_LLM_PROVIDER"] = "mock"
+    proc = subprocess.run(
+        [sys.executable, "scripts/verify_llm_live.py", "--skip-pdf"],
+        capture_output=True, text=True, env=env, cwd=str(main.REPO_ROOT / "backend"),
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout
+    assert "generator is llm-v1" in proc.stdout
 
 
 # --- 13: eval fixtures — mocked LLM output stays grounded on every sample ---
