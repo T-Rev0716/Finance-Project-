@@ -132,6 +132,9 @@ Tests:
 cd backend && .venv/bin/python -m pytest
 ```
 
+Deploying to a real URL (Vercel + Railway, with git-based continuous
+deployment): see [DEPLOY.md](DEPLOY.md).
+
 ## Client Portfolio Review Brief
 
 Generated per analysis (`GET /analyses/{id}/brief`, cached in SQLite; `POST` regenerates)

@@ -26,9 +26,16 @@ MAX_UPLOAD_BYTES = 1_000_000  # synthetic CSVs are tiny; reject anything larger
 
 app = FastAPI(title="AdvisorLens API", version=ENGINE_VERSION)
 
+# Deployed frontend origins (e.g. a Vercel URL) go in ADVISORLENS_CORS_ORIGINS as a
+# comma-separated list; localhost stays allowed so local dev keeps working.
+_extra_origins = [
+    origin.strip()
+    for origin in os.environ.get("ADVISORLENS_CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", *_extra_origins],
     allow_methods=["*"],
     allow_headers=["*"],
 )
