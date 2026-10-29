@@ -64,8 +64,8 @@ Back in Railway → your backend service → **Variables**, set
 multiple origins, e.g. if you later add a custom domain too). Railway
 redeploys automatically on variable changes.
 
-Open the Vercel URL — it should load, hit the Railway API, and work exactly
-like the local dev setup.
+Open the Vercel URL for the landing page, then `/workspace` — the workspace
+should hit the Railway API and work exactly like the local dev setup.
 
 ## Ongoing development
 

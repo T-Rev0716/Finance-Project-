@@ -49,7 +49,7 @@ backend/
     service.py      # ingest -> summarize -> rules -> persist pipeline
     main.py         # FastAPI endpoints
   tests/            # pytest suite
-frontend/           # Next.js dashboard (analyze, saved-analyses history, review brief)
+frontend/           # Next.js: landing page (/) + workspace (/workspace: analyze, history, review brief)
 data/samples/       # 3 synthetic portfolio CSVs
 ```
 
@@ -106,7 +106,8 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000, pick a sample or upload a CSV.
+Open http://localhost:3000 for the landing page, or go straight to
+http://localhost:3000/workspace to pick a sample or upload a CSV.
 
 API without the frontend:
 

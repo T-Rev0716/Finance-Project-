@@ -13,8 +13,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AdvisorLens",
-  description: "AI-assisted portfolio review support for financial advisors (synthetic data only)",
+  title: {
+    default: "AdvisorLens — Portfolio review support for financial advisors",
+    template: "%s · AdvisorLens",
+  },
+  description:
+    "Evidence-based portfolio review support for financial advisors: transparent review rules, traceable findings, and client-ready review briefs.",
 };
 
 export default function RootLayout({
@@ -25,7 +29,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} h-full scroll-smooth antialiased`}
+      data-scroll-behavior="smooth"
     >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
