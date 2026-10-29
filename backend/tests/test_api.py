@@ -25,6 +25,7 @@ def test_list_samples(client):
     assert response.json()["samples"] == [
         "conservative_mismatch.csv",
         "growth_concentrated.csv",
+        "margaret_retiree_tech_heavy.csv",
         "retiree_cash_drag.csv",
     ]
 

@@ -50,7 +50,7 @@ backend/
     main.py         # FastAPI endpoints
   tests/            # pytest suite
 frontend/           # Next.js: landing page (/) + workspace (/workspace: analyze, history, review brief)
-data/samples/       # 3 synthetic portfolio CSVs
+data/samples/       # 4 synthetic portfolio CSVs
 ```
 
 ## Portfolio CSV format
@@ -87,6 +87,16 @@ compliance guard, and covered by tests.
 | `growth_concentrated.csv`   | Single-holding concentration (NVDA 24%), Technology sector 56%, tax-related review consideration |
 | `conservative_mismatch.csv` | Conservative profile with 70% equity, tax-related review consideration (IRA losses correctly ignored) |
 | `retiree_cash_drag.csv`     | 18% cash (cash drag) and a retirement-account loss that produces no tax language |
+| `margaret_retiree_tech_heavy.csv` | "Margaret, 62", the landing page's fictional sample client: AAPL 22%, Technology 40%, Conservative profile with 62% equity, taxable BND loss (IRA loss on JNJ correctly ignored) |
+
+The landing page's sample brief (`frontend/public/samples/margaret-review-brief.pdf`, plus a
+first-page preview image) is generated from `margaret_retiree_tech_heavy.csv` by the real
+engine. Regenerate it after changing rules or brief templates so the published sample stays in
+sync (the preview image needs `pdftoppm` from poppler-utils):
+
+```bash
+cd backend && .venv/bin/python scripts/build_sample_brief.py
+```
 
 ## Running it
 

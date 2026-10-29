@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
@@ -9,31 +10,50 @@ const SEVERITY_STYLES: Record<Severity, string> = {
   info: "bg-sky-100 text-sky-800 border-sky-200",
 };
 
+// Both files are generated from the real engine by backend/scripts/build_sample_brief.py.
+const SAMPLE_BRIEF_PDF = "/samples/margaret-review-brief.pdf";
+const SAMPLE_BRIEF_PREVIEW = "/samples/margaret-review-brief-page1.png";
+
+const BUILDER_NAME = "Trevor Brainard";
+const CONTACT_EMAIL = "trevormyles1618@gmail.com";
+
+const PRIMARY_BUTTON =
+  "inline-flex items-center gap-2 rounded-md bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700";
+const SECONDARY_BUTTON =
+  "inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-800 shadow-sm transition-colors hover:bg-slate-50";
+
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
   { href: "#review-rules", label: "Review rules" },
   { href: "#review-brief", label: "Review brief" },
   { href: "#compliance", label: "Compliance" },
+  { href: "#contact", label: "Contact" },
 ];
 
-// Real output for the bundled data/samples/growth_concentrated.csv.
+// Real engine output for data/samples/margaret_retiree_tech_heavy.csv.
 const PREVIEW_ITEMS: { severity: Severity; title: string; detail: string; rule: string }[] = [
   {
     severity: "high",
-    title: "Concentration review: NVDA",
-    detail: "24.0% of portfolio · review threshold 20.0%",
+    title: "Concentration review: AAPL",
+    detail: "22.0% of portfolio · review threshold 20.0%",
     rule: "concentration_single_holding",
+  },
+  {
+    severity: "high",
+    title: "Risk tolerance alignment review",
+    detail: "Conservative profile · 62.0% equity vs. 60.0% threshold",
+    rule: "risk_tolerance_mismatch",
   },
   {
     severity: "medium",
     title: "Sector concentration review: Technology",
-    detail: "56.1% of portfolio · review threshold 35.0%",
+    detail: "40.0% of portfolio · review threshold 35.0%",
     rule: "concentration_sector",
   },
   {
     severity: "info",
-    title: "Tax-related review consideration: PYPL",
-    detail: "$1,800 unrealized loss in a taxable account",
+    title: "Tax-related review consideration: BND",
+    detail: "$9,500 unrealized loss in a taxable account",
     rule: "tax_review_taxable_loss",
   },
 ];
@@ -65,7 +85,7 @@ const STEPS = [
   {
     title: "Load a portfolio",
     body: "Upload a holdings CSV or start from a preloaded sample. Every row is validated (schema, numeric fields, asset classes, account types) before analysis runs.",
-    detail: "CSV upload · 3 samples included",
+    detail: "CSV upload · 4 samples included",
   },
   {
     title: "Run the review rules",
@@ -112,22 +132,10 @@ const RULES: { name: string; trigger: string; severity: Severity; id: string }[]
   },
 ];
 
-const BRIEF_SECTIONS = [
-  "Executive Summary",
-  "Portfolio Snapshot",
-  "Key Review Items",
-  "Advisor Talking Points",
-  "Client Discussion Questions",
-  "Follow-Up Items",
-  "Evidence Table",
-  "Data Assumptions",
-  "Compliance Disclaimer",
-];
-
 const BRIEF_POINTS = [
+  "Nine sections, from executive summary to evidence table and compliance disclaimer",
   "Review items map one-to-one to the rules that fired",
-  "Cached per analysis and regenerable on demand",
-  "Saved-analyses history with brief status and one-click exports",
+  "Her JNJ loss sits in an IRA, so it gets no tax language: the retirement-account guardrail",
 ];
 
 const COMPLIANCE_POINTS = [
@@ -149,11 +157,16 @@ const COMPLIANCE_POINTS = [
   {
     icon: <DatabaseIcon />,
     title: "Synthetic data in this release",
-    body: "No client data, brokerage connections, or market-data feeds. The bundled sample portfolios are synthetic by design.",
+    body: "No client data, brokerage connections, or market-data feeds. The bundled sample portfolios and clients are fictional by design.",
   },
 ];
 
-const SAMPLES = ["Concentrated growth account", "Conservative profile, high equity", "Retiree account with elevated cash"];
+const SAMPLES = [
+  "Margaret: retiree, 40% technology",
+  "Concentrated growth account",
+  "Conservative profile, high equity",
+  "Retiree account with elevated cash",
+];
 
 export default function Landing() {
   return (
@@ -167,6 +180,7 @@ export default function Landing() {
         <ReviewBrief />
         <Compliance />
         <FinalCta />
+        <BuiltBy />
       </main>
       <SiteFooter />
     </div>
@@ -181,7 +195,7 @@ function SiteHeader() {
           <LogoMark />
           <span className="text-[17px] font-semibold tracking-tight">AdvisorLens</span>
         </Link>
-        <nav className="hidden items-center gap-8 text-sm text-slate-600 md:flex">
+        <nav className="hidden items-center gap-7 text-sm text-slate-600 lg:flex">
           {NAV_LINKS.map((link) => (
             <a key={link.href} href={link.href} className="transition-colors hover:text-slate-900">
               {link.label}
@@ -229,22 +243,15 @@ function Hero() {
             traced to a named rule, its threshold, and the source file.
           </p>
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <PrimaryButton href="/workspace">Try a sample portfolio</PrimaryButton>
-            <a
-              href="#how-it-works"
-              className="rounded-md border border-slate-300 bg-white px-5 py-3 text-sm font-medium text-slate-800 shadow-sm transition-colors hover:bg-slate-50"
-            >
-              See how it works
-            </a>
+            <SampleBriefLink className={PRIMARY_BUTTON}>View sample brief</SampleBriefLink>
+            <Link href="/workspace" className={SECONDARY_BUTTON}>
+              Try it on a sample portfolio
+            </Link>
           </div>
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-slate-500">
-            {["No account needed", "Synthetic sample data", "Markdown, HTML & PDF export"].map((text) => (
-              <li key={text} className="flex items-center gap-2">
-                <CheckIcon className="h-4 w-4 text-emerald-600" />
-                {text}
-              </li>
-            ))}
-          </ul>
+          <p className="mt-4 text-sm text-slate-500">
+            The sample is a 6-page PDF for Margaret, a fictional 62-year-old retiree, generated by
+            the engine from her portfolio file.
+          </p>
         </div>
         <ProductPreview />
       </div>
@@ -264,56 +271,61 @@ function ProductPreview() {
           <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
           <span className="h-2.5 w-2.5 rounded-full bg-slate-300" />
-          <span className="ml-3 min-w-0 truncate font-mono text-xs text-slate-500">growth_concentrated.csv</span>
+          <span className="ml-3 min-w-0 truncate font-mono text-xs text-slate-500">
+            margaret_retiree_tech_heavy.csv
+          </span>
           <span className="ml-auto shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 ring-1 ring-emerald-200">
             Analysis complete
           </span>
         </div>
         <div className="space-y-4 p-5">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+              M
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">Margaret, 62 · Retired</p>
+              <p className="text-xs text-slate-500">Conservative · Goal: retirement income</p>
+            </div>
+          </div>
           <div className="grid grid-cols-3 gap-3">
-            <PreviewStat label="Total value" value="$90,000" />
-            <PreviewStat label="Unrealized G/L" value="+$22,200" tone="text-emerald-700" />
-            <PreviewStat label="Review items" value="3" />
+            <PreviewStat label="Total value" value="$850,000" />
+            <PreviewStat label="Unrealized G/L" value="+$213,500" tone="text-emerald-700" />
+            <PreviewStat label="Review items" value="4" />
           </div>
-          <div>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Advisor review items
-            </p>
-            <ul className="space-y-2.5">
-              {PREVIEW_ITEMS.map((item) => (
-                <li key={item.rule} className="rounded-lg border border-slate-200 p-3">
-                  <div className="flex items-start gap-2 sm:items-center">
-                    <SeverityPill severity={item.severity} />
-                    <span className="min-w-0 text-sm font-medium sm:truncate">{item.title}</span>
-                  </div>
-                  <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                    <span className="text-xs text-slate-600">{item.detail}</span>
-                    <code className="font-mono text-[11px] text-slate-400">{item.rule}</code>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 px-4 py-3 text-white">
+          <ul className="space-y-2">
+            {PREVIEW_ITEMS.map((item) => (
+              <li key={item.rule} className="rounded-lg border border-slate-200 px-3 py-2.5">
+                <div className="flex items-start gap-2 sm:items-center">
+                  <SeverityPill severity={item.severity} />
+                  <span className="min-w-0 text-sm font-medium sm:truncate">{item.title}</span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span className="text-xs text-slate-600">{item.detail}</span>
+                  <code className="font-mono text-[11px] text-slate-400">{item.rule}</code>
+                </div>
+              </li>
+            ))}
+          </ul>
+          <a
+            href={SAMPLE_BRIEF_PDF}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between gap-3 rounded-lg bg-slate-900 px-4 py-3 text-white transition-colors hover:bg-slate-800"
+          >
             <div>
-              <p className="text-sm font-medium">Client Portfolio Review Brief</p>
-              <p className="text-xs text-slate-400">9 sections · grounded in this analysis</p>
+              <p className="text-sm font-medium">Margaret&apos;s Client Portfolio Review Brief</p>
+              <p className="text-xs text-slate-400">6 pages · generated from this analysis</p>
             </div>
-            <div className="flex gap-1.5">
-              {["MD", "HTML", "PDF"].map((format) => (
-                <span
-                  key={format}
-                  className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 font-mono text-[10px] text-slate-300"
-                >
-                  {format}
-                </span>
-              ))}
-            </div>
-          </div>
+            <span className="flex shrink-0 items-center gap-1 rounded border border-white/15 bg-white/5 px-2 py-1 text-xs text-slate-200">
+              Open PDF
+              <ArrowUpRightIcon />
+            </span>
+          </a>
         </div>
       </div>
       <p className="mt-4 text-center text-xs text-slate-400">
-        Actual output for the bundled <span className="font-mono">growth_concentrated.csv</span> sample
+        Real engine output for a fictional client · synthetic data
       </p>
     </div>
   );
@@ -411,7 +423,7 @@ function ReviewBrief() {
           <SectionHeading
             eyebrow="Client Portfolio Review Brief"
             title="A meeting-ready brief, built only from the analysis."
-            body="The brief turns review items into talking points, discussion questions, and follow-ups without adding facts that aren't in the data. Every section is generated from the stored analysis record."
+            body="This is Margaret's brief, exactly as the engine produced it. Her four review items become talking points, discussion questions, and follow-ups, with no facts added that aren't in her data."
           />
           <ul className="mt-8 space-y-3">
             {BRIEF_POINTS.map((point) => (
@@ -421,43 +433,38 @@ function ReviewBrief() {
               </li>
             ))}
           </ul>
+          <div className="mt-9">
+            <SampleBriefLink className={PRIMARY_BUTTON}>Read Margaret&apos;s full brief</SampleBriefLink>
+          </div>
         </div>
-        <div className="relative isolate lg:order-1">
+        <a
+          href={SAMPLE_BRIEF_PDF}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open Margaret's Client Portfolio Review Brief (PDF)"
+          className="group relative isolate block lg:order-1"
+        >
           <div
             aria-hidden="true"
             className="absolute inset-x-6 -bottom-3 -z-10 h-full rounded-xl border border-slate-200 bg-slate-50"
           />
-          <div className="rounded-xl border border-slate-200 bg-white p-7 shadow-lg shadow-slate-900/5">
-            <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-5">
-              <div>
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                  Prepared for advisor review
-                </p>
-                <p className="mt-1 text-lg font-semibold">Client Portfolio Review Brief</p>
-                <p className="mt-1 font-mono text-xs text-slate-500">growth_concentrated.csv · deterministic-v1</p>
-              </div>
-              <LogoMark className="h-7 w-7 shrink-0" />
-            </div>
-            <ol className="mt-4 divide-y divide-slate-100">
-              {BRIEF_SECTIONS.map((section, i) => (
-                <li key={section} className="flex items-center gap-4 py-2.5 text-sm">
-                  <span className="w-5 font-mono text-xs text-slate-400">{i + 1}</span>
-                  <span className="text-slate-700">{section}</span>
-                </li>
-              ))}
-            </ol>
-            <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-200 pt-5">
-              {["Export Markdown", "Export HTML", "Export PDF"].map((label) => (
-                <span
-                  key={label}
-                  className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700"
-                >
-                  {label}
-                </span>
-              ))}
+          <div className="relative max-h-[600px] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg shadow-slate-900/5 transition-shadow group-hover:shadow-xl">
+            <Image
+              src={SAMPLE_BRIEF_PREVIEW}
+              alt="First page of Margaret's Client Portfolio Review Brief"
+              width={935}
+              height={1210}
+              sizes="(min-width: 1024px) 540px, 100vw"
+              className="h-auto w-full"
+            />
+            <div className="absolute inset-x-0 bottom-0 flex h-40 items-end justify-center bg-gradient-to-t from-white via-white/90 to-transparent pb-6">
+              <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white shadow-sm transition-colors group-hover:bg-slate-700">
+                Open full PDF · 6 pages
+                <ArrowUpRightIcon />
+              </span>
             </div>
           </div>
-        </div>
+        </a>
       </div>
     </section>
   );
@@ -501,7 +508,7 @@ function FinalCta() {
           See it on a sample portfolio.
         </h2>
         <p className="mt-4 text-lg leading-relaxed text-balance text-slate-600">
-          Three synthetic portfolios are preloaded, each built to show a different kind of review
+          Four synthetic portfolios are preloaded, each built to show a different kind of review
           item.
         </p>
         <ul className="mt-6 flex flex-wrap justify-center gap-2">
@@ -514,8 +521,42 @@ function FinalCta() {
             </li>
           ))}
         </ul>
-        <div className="mt-10">
-          <PrimaryButton href="/workspace">Open the workspace</PrimaryButton>
+        <div className="mt-10 flex flex-wrap justify-center gap-3">
+          <Link href="/workspace" className={PRIMARY_BUTTON}>
+            Open the workspace
+            <ArrowRightIcon />
+          </Link>
+          <SampleBriefLink className={SECONDARY_BUTTON}>View sample brief</SampleBriefLink>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function BuiltBy() {
+  return (
+    <section id="contact" className="scroll-mt-16 border-t border-slate-200 py-16">
+      <div className="mx-auto max-w-6xl px-6">
+        <div className="flex flex-col gap-8 rounded-2xl border border-slate-200 bg-slate-50/70 p-6 sm:p-8 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-slate-900 text-lg font-semibold text-white">
+              TB
+            </span>
+            <div>
+              <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">
+                Who&apos;s behind it
+              </p>
+              <p className="mt-1 text-xl font-semibold">Built by {BUILDER_NAME}</p>
+              <p className="mt-1.5 max-w-xl leading-relaxed text-slate-600">
+                Designed and built end to end by {BUILDER_NAME}: the rules engine, the review
+                brief, and this site. Questions and feedback are welcome.
+              </p>
+            </div>
+          </div>
+          <a href={`mailto:${CONTACT_EMAIL}`} className={`${PRIMARY_BUTTON} shrink-0 self-start md:self-auto`}>
+            <MailIcon />
+            {CONTACT_EMAIL}
+          </a>
         </div>
       </div>
     </section>
@@ -548,8 +589,14 @@ function SiteFooter() {
             ))}
           </nav>
         </div>
-        <p className="mt-10 border-t border-slate-200 pt-6 text-xs text-slate-400">
-          © {new Date().getFullYear()} AdvisorLens
+        <p className="mt-10 flex flex-wrap gap-x-2 gap-y-1 border-t border-slate-200 pt-6 text-xs text-slate-400">
+          <span>© {new Date().getFullYear()} AdvisorLens</span>
+          <span aria-hidden="true">·</span>
+          <span>Built by {BUILDER_NAME}</span>
+          <span aria-hidden="true">·</span>
+          <a href={`mailto:${CONTACT_EMAIL}`} className="hover:text-slate-600">
+            {CONTACT_EMAIL}
+          </a>
         </p>
       </div>
     </footer>
@@ -566,15 +613,12 @@ function SectionHeading({ eyebrow, title, body }: { eyebrow: string; title: stri
   );
 }
 
-function PrimaryButton({ href, children }: { href: string; children: ReactNode }) {
+function SampleBriefLink({ className, children }: { className: string; children: ReactNode }) {
   return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700"
-    >
+    <a href={SAMPLE_BRIEF_PDF} target="_blank" rel="noopener noreferrer" className={className}>
       {children}
-      <ArrowRightIcon />
-    </Link>
+      <ArrowUpRightIcon />
+    </a>
   );
 }
 
@@ -645,6 +689,23 @@ function ArrowRightIcon() {
   return (
     <Icon className="h-4 w-4">
       <path d="M5 12h14M13 6l6 6-6 6" />
+    </Icon>
+  );
+}
+
+function ArrowUpRightIcon() {
+  return (
+    <Icon className="h-4 w-4">
+      <path d="M7 17L17 7M8 7h9v9" />
+    </Icon>
+  );
+}
+
+function MailIcon() {
+  return (
+    <Icon className="h-4 w-4">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3.5 6.5l8.5 6.5 8.5-6.5" />
     </Icon>
   );
 }

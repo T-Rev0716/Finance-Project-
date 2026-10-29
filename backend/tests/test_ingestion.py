@@ -20,7 +20,7 @@ def test_loads_valid_csv(simple_csv):
 
 def test_loads_all_sample_files(samples_dir):
     files = sorted(samples_dir.glob("*.csv"))
-    assert len(files) == 3
+    assert len(files) == 4
     for path in files:
         portfolio = load_portfolio(path.read_bytes(), source_name=path.name)
         assert len(portfolio.holdings) > 0

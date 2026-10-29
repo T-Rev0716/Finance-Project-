@@ -254,6 +254,19 @@ def test_conservative_mismatch_sample(samples_dir):
     assert [f.evidence["ticker"] for f in tax_flags] == ["XOM"]  # IRA losses excluded
 
 
+def test_margaret_retiree_tech_heavy_sample(samples_dir):
+    portfolio = load_portfolio((samples_dir / "margaret_retiree_tech_heavy.csv").read_bytes())
+    flags = run_rules(portfolio)
+    assert {f.rule_id for f in flags} == {
+        "concentration_single_holding",
+        "concentration_sector",
+        "risk_tolerance_mismatch",
+        "tax_review_taxable_loss",
+    }
+    tax_flags = [f for f in flags if f.rule_id == "tax_review_taxable_loss"]
+    assert [f.evidence["ticker"] for f in tax_flags] == ["BND"]  # JNJ loss is in an IRA
+
+
 def test_retiree_cash_drag_sample(samples_dir):
     portfolio = load_portfolio((samples_dir / "retiree_cash_drag.csv").read_bytes())
     ids = {f.rule_id for f in run_rules(portfolio)}

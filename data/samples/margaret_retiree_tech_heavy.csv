@@ -1,0 +1,10 @@
+ticker,security_name,asset_class,sector,shares,market_value,cost_basis,account_type,risk_tolerance,client_goal
+AAPL,Apple Inc,Equity,Technology,820,187000.00,41000.00,Taxable,Conservative,Retirement Income
+MSFT,Microsoft Corp,Equity,Technology,200,85000.00,52000.00,Traditional IRA,Conservative,Retirement Income
+XLK,Technology Select Sector SPDR ETF,Equity,Technology,285,68000.00,49000.00,Roth IRA,Conservative,Retirement Income
+SCHD,Schwab US Dividend Equity ETF,Equity,Diversified,3500,96000.00,81000.00,Taxable,Conservative,Retirement Income
+JNJ,Johnson & Johnson,Equity,Healthcare,290,46000.00,49500.00,Traditional IRA,Conservative,Retirement Income
+PG,Procter & Gamble Co,Equity,Consumer Staples,270,45000.00,33000.00,Taxable,Conservative,Retirement Income
+BND,Vanguard Total Bond Market ETF,Fixed Income,Bond,1810,132000.00,141500.00,Taxable,Conservative,Retirement Income
+TIP,iShares TIPS Bond ETF,Fixed Income,Bond,1040,114500.00,113000.00,Traditional IRA,Conservative,Retirement Income
+VMFXX,Vanguard Federal Money Market Fund,Cash,Cash,76500,76500.00,76500.00,Taxable,Conservative,Retirement Income
