@@ -15,7 +15,7 @@ const SAMPLE_BRIEF_PDF = "/samples/margaret-review-brief.pdf";
 const SAMPLE_BRIEF_PREVIEW = "/samples/margaret-review-brief-page1.png";
 
 const BUILDER_NAME = "Trevor Brainard";
-const CONTACT_EMAIL = "trevormyles1618@gmail.com";
+const CONTACT_EMAIL = "brainardtrevor@gmail.com";
 
 const PRIMARY_BUTTON =
   "inline-flex items-center gap-2 rounded-md bg-slate-900 px-5 py-3 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700";
