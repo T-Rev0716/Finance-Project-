@@ -91,8 +91,13 @@ with tempfile.TemporaryDirectory() as temporary:
             pdf = page.request.get(f'http://127.0.0.1:8000/analyses/{aid}/brief/pdf')
             assert pdf.status == 200 and pdf.body().startswith(b'%PDF')
             (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':['save','reload','resolve-note-required','history','stale-update-conflict','mobile-overflow','no-page-errors','pdf-export']}))
-            (OUT/'verified-review-brief.pdf').write_bytes(pdf.body())
-            verify_households(page, OUT)
+            try:
+                verify_households(page, OUT)
+            except Exception:
+                page.screenshot(path=str(OUT/'household-failure.png'), full_page=True)
+                (OUT/'household-failure.html').write_text(page.content())
+                (OUT/'page-errors.json').write_text(json.dumps(errors))
+                raise
             assert not errors, errors
             browser.close()
     finally:

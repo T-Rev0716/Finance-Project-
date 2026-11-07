@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import { cloneElement, isValidElement, useCallback, useEffect, useId, useState } from 'react';
+import type { ReactElement, ReactNode } from 'react';
 import { formatMoney } from '@/lib/api';
 import { Account, CashFlow, Household, HouseholdError, HouseholdListItem, HouseholdVersion, Profile, demoProfile, emptyProfile, householdRequest } from '@/lib/households';
 
@@ -12,7 +12,8 @@ const primary = 'rounded-lg bg-teal-800 px-4 py-2 text-sm font-semibold text-whi
 const money = (value: string | null) => value === null ? 'Not established' : formatMoney(Number(value));
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
-  return <label className="block min-w-0 text-sm font-medium text-slate-700">{label}{children}</label>;
+  const id = useId();
+  return <div className="min-w-0"><label htmlFor={id} className="block text-sm font-medium text-slate-700">{label}</label>{isValidElement(children) ? cloneElement(children as ReactElement<{ id?: string }>, { id }) : children}</div>;
 }
 function Section({ title, detail, children }: { title: string; detail: string; children: ReactNode }) {
   return <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6"><h2 className="text-lg font-semibold">{title}</h2><p className="mb-5 mt-1 text-sm text-slate-500">{detail}</p>{children}</section>;

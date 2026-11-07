@@ -20,8 +20,6 @@ jobs:
       - run: pip install -r backend/requirements.txt
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest backend/tests -q
-      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
-      - run: python backend/scripts/build_sample_brief.py
       - run: npm ci --ignore-scripts
         working-directory: frontend
       - name: Capture dependency advisory report
@@ -29,14 +27,13 @@ jobs:
         working-directory: frontend
         run: |
           mkdir -p ../browser-evidence
-          npm audit --json > ../browser-evidence/dependency-audit.json
+          npm audit --json --fetch-retries=0 --fetch-timeout=15000 > ../browser-evidence/dependency-audit.json
+      - name: Check production dependency advisories
+        working-directory: frontend
+        run: npm audit --omit=dev --json --fetch-retries=0 --fetch-timeout=15000 > ../browser-evidence/runtime-dependency-audit.json
       - run: npm run lint && npm run build
         working-directory: frontend
       - run: python backend/scripts/verify_review_workflow.py browser-evidence
-      - if: always()
-        run: |
-          mkdir -p browser-evidence/samples
-          cp frontend/public/samples/margaret-review-brief.pdf frontend/public/samples/margaret-review-brief-page1.png browser-evidence/samples/
       - uses: actions/upload-artifact@v4
         if: always()
         with:
