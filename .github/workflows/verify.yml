@@ -24,10 +24,17 @@ jobs:
       - run: python backend/scripts/build_sample_brief.py
       - run: npm ci --ignore-scripts
         working-directory: frontend
+      - name: Capture dependency advisory report
+        continue-on-error: true
+        working-directory: frontend
+        run: |
+          mkdir -p ../browser-evidence
+          npm audit --json > ../browser-evidence/dependency-audit.json
       - run: npm run lint && npm run build
         working-directory: frontend
       - run: python backend/scripts/verify_review_workflow.py browser-evidence
-      - run: |
+      - if: always()
+        run: |
           mkdir -p browser-evidence/samples
           cp frontend/public/samples/margaret-review-brief.pdf frontend/public/samples/margaret-review-brief-page1.png browser-evidence/samples/
       - uses: actions/upload-artifact@v4

@@ -14,6 +14,10 @@ This increment builds on the data-integrity branch, without merging it or deploy
 
 ## Scope boundaries
 
+Update: household profiles and valuation dates are now implemented in the subsequent
+household increment; see [HOUSEHOLDS.md](HOUSEHOLDS.md) and [ROADMAP.md](ROADMAP.md).
+The original scope notes below describe the review-queue increment in isolation.
+
 Notes remain internal, separate from client reports and LLM input. Household entities,
 review ownership/authentication, valuation dates, follow-up due dates, and explicit
 selection of notes for a meeting report are later increments. Existing generated briefs

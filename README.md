@@ -25,7 +25,7 @@ print-ready PDF export. Every analysis is stored with an audit trail.
 | Storage   | SQLite (analyses + briefs + append-only audit log) |
 | PDF export| Headless Chromium via Playwright (renders the same HTML template) |
 | LLM (optional) | OpenAI-compatible `/chat/completions` provider behind the `GENERATORS` registry |
-| Tests     | pytest (152 tests, including review workflow and PDF integration checks)                        |
+| Tests     | pytest (181 tests, including household/review workflows and PDF integration checks)                        |
 
 shadcn/ui and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately deferred. The
 brief generator is deterministic by default; an optional LLM generator (`llm-v1`) drafts

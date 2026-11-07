@@ -23,7 +23,7 @@ def verify_households(page, out):
     expect(complete).to_be_disabled()
     page.get_by_role('button',name='Save household',exact=True).click()
     expect(page.get_by_role('status')).to_have_text('Household saved · version 2.')
-    expect(summary.get_by_text('Not established',exact=True)).to_be_visible()
+    expect(summary.get_by_role('paragraph').filter(has_text='Not established')).to_be_visible()
     page.get_by_label('Cash flow 4 amount (USD)',exact=True).fill('12000')
     complete.check()
     page.get_by_role('button',name='Save household',exact=True).click()
