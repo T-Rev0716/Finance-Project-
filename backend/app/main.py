@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
-from . import ENGINE_VERSION, db
+from . import ENGINE_VERSION, db, reviews
 from .brief import GENERATORS, brief_to_html, brief_to_markdown, generate_brief, resolve_generator
 from .ingestion import IngestionError
 from .llm import LLMConfig
@@ -171,3 +171,21 @@ def _analyze(data: bytes, source_name: str) -> dict:
             {"source_name": source_name, "errors": exc.errors},
         )
         raise HTTPException(status_code=422, detail={"errors": exc.errors}) from exc
+
+
+@app.get("/analyses/{analysis_id}/reviews")
+def get_finding_reviews(analysis_id: int) -> dict:
+    try:
+        return reviews.get_reviews(DB_PATH, analysis_id)
+    except reviews.ReviewNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.put("/analyses/{analysis_id}/reviews/{finding_id}")
+def save_finding_review(analysis_id: int, finding_id: str, update: reviews.ReviewUpdate) -> dict:
+    try:
+        return reviews.update_review(DB_PATH, analysis_id, finding_id, update)
+    except reviews.ReviewNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except reviews.ReviewConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

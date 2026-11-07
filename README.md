@@ -25,7 +25,7 @@ print-ready PDF export. Every analysis is stored with an audit trail.
 | Storage   | SQLite (analyses + briefs + append-only audit log) |
 | PDF export| Headless Chromium via Playwright (renders the same HTML template) |
 | LLM (optional) | OpenAI-compatible `/chat/completions` provider behind the `GENERATORS` registry |
-| Tests     | pytest (133 tests, including PDF integration checks)                        |
+| Tests     | pytest (152 tests, including review workflow and PDF integration checks)                        |
 
 shadcn/ui and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately deferred. The
 brief generator is deterministic by default; an optional LLM generator (`llm-v1`) drafts
@@ -251,3 +251,41 @@ Security exposure is consolidated by normalized ticker across account rows and d
 - shadcn/ui component polish
 - Real market data (FMP), account aggregation (Plaid/SnapTrade)
 - Authentication and multi-user support
+
+
+## Advisor review queue
+
+Open an analysis in the workspace to track each finding as **Open**, **Discussed**,
+**Follow-up**, or **Resolved**. Add an advisor note and explicitly choose **Save review**.
+Resolving a finding requires a decision note. Filters show saved statuses; unsaved
+edits are labeled. Notes support up to 4,000 characters.
+
+Each decision is tied to one immutable analysis and one stable finding ID. Changes
+are stored in SQLite with revision history and an audit event in the same transaction.
+Conflicting updates return HTTP 409 instead of overwriting another tab's work; the UI
+keeps the draft and offers an explicit discard-and-reload action. Reopening a resolved
+item preserves its earlier decisions. Existing databases gain the new tables without
+rewriting stored analyses.
+
+Internal notes are deliberately excluded from AI prompts and client brief exports.
+The original deterministic evidence remains unchanged when an item is resolved.
+This remains a local synthetic-data demo without user authentication; analysis separation
+is not a substitute for per-user authorization or a household data model.
+
+Endpoints:
+- `GET /analyses/{id}/reviews` — findings with saved state and decision history.
+- `PUT /analyses/{id}/reviews/{finding_id}` — JSON `status`, `note`, `expected_version`.
+
+Validation:
+```bash
+cd backend
+.venv/bin/python -m pytest tests/test_reviews.py -q
+```
+
+After building the frontend, run `python backend/scripts/verify_review_workflow.py`
+from the repository root with the backend environment active. This starts isolated
+synthetic services on ports 8000 and 3100; those ports must be unused. It needs installed
+Playwright Chromium (or `ADVISORLENS_CHROMIUM_PATH`). It verifies saving/reloading,
+resolution requirements, history, stale-tab conflicts, mobile overflow, browser errors,
+and PDF export, and writes evidence to `/tmp/advisorlens-browser-evidence` by default.
+The GitHub verification workflow runs these checks and uploads browser evidence.
