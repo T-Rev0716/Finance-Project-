@@ -8,8 +8,7 @@ print-ready PDF export. Every analysis is stored with an audit trail.
 
 > **Compliance posture**
 > - Synthetic sample data only — no real client data, no brokerage connections, no market data APIs.
-> - Advisor-support language only (*review, evaluate, consider, may indicate*). Output never
->   contains direct-advice language; a runtime guard and tests enforce a banned-phrase list
+> - Advisor-support language only (*review, evaluate, consider, may indicate*). A runtime guard and tests screen a configured banned-phrase list
 >   (buy, sell, guaranteed, risk-free, best investment, will outperform).
 > - Every finding traces back to the uploaded file (SHA-256 recorded) and a named
 >   deterministic rule with its threshold and evidence values.
@@ -26,7 +25,7 @@ print-ready PDF export. Every analysis is stored with an audit trail.
 | Storage   | SQLite (analyses + briefs + append-only audit log) |
 | PDF export| Headless Chromium via Playwright (renders the same HTML template) |
 | LLM (optional) | OpenAI-compatible `/chat/completions` provider behind the `GENERATORS` registry |
-| Tests     | pytest (112 tests)                        |
+| Tests     | pytest (133 tests, including PDF integration checks)                        |
 
 shadcn/ui and integrations (FMP/Plaid/SnapTrade/Langfuse) are deliberately deferred. The
 brief generator is deterministic by default; an optional LLM generator (`llm-v1`) drafts
@@ -236,6 +235,12 @@ source filename, file SHA-256, engine version, client profile, full summary, and
 Generated briefs are stored in a `briefs` table. An append-only `audit_log` records
 completion events (including which rules fired), brief generations, and rejected
 ingestions with their validation errors.
+
+## Current review and next milestones
+
+See [the November 6 source review](docs/REVIEW-2026-11-06.md) for data-integrity fixes, verification limits, real-client readiness gaps, and the recommended advisor-review workflow.
+
+Security exposure is consolidated by normalized ticker across account rows and display-name variants. Conflicting classifications, missing required text, and nonfinite numeric inputs are rejected. Ticker identity is limited to this single-currency demo; multi-exchange use needs stronger security identifiers.
 
 ## Phase 3D+ candidates (not built)
 

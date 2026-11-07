@@ -71,7 +71,7 @@ def analyze_sample(name: str) -> dict:
 
 @app.post("/analyze/upload")
 async def analyze_upload(file: UploadFile) -> dict:
-    data = await file.read()
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         raise HTTPException(status_code=413, detail="File too large for Phase 1 (limit 1 MB).")
     return _analyze(data, source_name=file.filename or "uploaded.csv")

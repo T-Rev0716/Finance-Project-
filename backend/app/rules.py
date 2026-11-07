@@ -48,10 +48,11 @@ def rule_single_holding_concentration(portfolio: Portfolio) -> list[Flag]:
     df = portfolio.holdings
     total = float(df["market_value"].sum())
     non_cash = df[df["asset_class"] != CASH_ASSET_CLASS]
-    by_ticker = non_cash.groupby(["ticker", "security_name"], sort=False)["market_value"].sum()
+    by_ticker = non_cash.groupby("ticker", sort=False)["market_value"].sum()
 
     flags = []
-    for (ticker, name), value in by_ticker.items():
+    for ticker, value in by_ticker.items():
+        name = str(non_cash.loc[non_cash["ticker"] == ticker, "security_name"].iloc[0])
         weight = float(value) / total
         if weight > SINGLE_HOLDING_MAX_WEIGHT:
             flags.append(
