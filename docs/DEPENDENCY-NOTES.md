@@ -21,12 +21,15 @@ because development advisories are documented; the functional/backend/browser ga
 blocking. A separate production-only dependency audit is also blocking. No real-client readiness is implied: authentication, authorization and production
 data protections are separate outstanding roadmap work.
 
-## Sample-report follow-up
+## Sample-report follow-up — completed with explicit approval
 
-The sample PDF was successfully regenerated and compared with the existing fictional
-repository report: extracted-text changes were only generation timestamps and engine
-version 0.1.0 -> 0.1.1. Automatic approval review nevertheless rejected uploading the
-refreshed PDF as potentially sensitive derived financial data without explicit user
-authorization. Published sample assets remain unchanged. CI still checks PDF rendering
-but does not upload the generated PDF as an artifact. The sample refresh remains blocked
-pending explicit approval; this does not block the household workflow.
+The sample PDF was regenerated from the repository's fictional Margaret portfolio.
+Its extracted-text changes compared with the old sample are limited to generation
+timestamps and engine version 0.1.0 -> 0.1.1. The matching first-page preview was
+regenerated from that same PDF.
+
+Automatic approval review initially blocked uploading the report as potentially sensitive
+financial data. On November 7, the user explicitly approved uploading the regenerated
+fictional Margaret sample PDF to this GitHub repository. The PDF and matching preview
+are now refreshed in this branch. No real client data or conference transcript was added.
+CI continues to test PDF rendering without uploading generated PDFs as artifacts.
