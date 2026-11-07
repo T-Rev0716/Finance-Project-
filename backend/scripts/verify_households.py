@@ -44,7 +44,7 @@ def verify_households(page, out):
     assert page.request.put(f'http://127.0.0.1:8000/households/{hid}',data={'profile':saved['profile'],'expected_version':3}).status==200
     page.get_by_label('Priorities and values',exact=True).fill('Keep this unsaved draft.')
     page.get_by_role('button',name='Save household',exact=True).click()
-    expect(page.get_by_role('alert')).to_contain_text('updated elsewhere')
+    expect(page.get_by_role('main').get_by_role('alert')).to_contain_text('updated elsewhere')
     expect(page.get_by_label('Priorities and values',exact=True)).to_have_value('Keep this unsaved draft.')
     page.once('dialog',lambda dialog:dialog.accept())
     page.get_by_role('button',name='Discard draft and load latest household',exact=True).click()
