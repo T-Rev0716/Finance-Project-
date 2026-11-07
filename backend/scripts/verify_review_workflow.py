@@ -13,6 +13,7 @@ import time
 from urllib.request import urlopen
 
 from playwright.sync_api import sync_playwright, expect
+from verify_households import verify_households
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else '/tmp/advisorlens-browser-evidence')
@@ -90,6 +91,9 @@ with tempfile.TemporaryDirectory() as temporary:
             pdf = page.request.get(f'http://127.0.0.1:8000/analyses/{aid}/brief/pdf')
             assert pdf.status == 200 and pdf.body().startswith(b'%PDF')
             (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':['save','reload','resolve-note-required','history','stale-update-conflict','mobile-overflow','no-page-errors','pdf-export']}))
+            (OUT/'verified-review-brief.pdf').write_bytes(pdf.body())
+            verify_households(page, OUT)
+            assert not errors, errors
             browser.close()
     finally:
         for process in reversed(processes):

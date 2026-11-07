@@ -289,3 +289,14 @@ Playwright Chromium (or `ADVISORLENS_CHROMIUM_PATH`). It verifies saving/reloadi
 resolution requirements, history, stale-tab conflicts, mobile overflow, browser errors,
 and PDF export, and writes evidence to `/tmp/advisorlens-browser-evidence` by default.
 The GitHub verification workflow runs these checks and uploads browser evidence.
+
+### Household planning foundation
+
+Open **Households** from the workspace, then **Use fictional example** to explore
+members, goals, ownership, valuation dates, and monthly/annual cash flow. A completed
+cash-flow inventory is required before a surplus or shortfall is shown. Save a profile,
+then attach its fixed version to a portfolio analysis for internal meeting context.
+Household data stays out of AI prompts and client reports. Use fictional information only.
+
+Details: [Household workflow](docs/HOUSEHOLDS.md).
+The [revised build roadmap](docs/ROADMAP.md) supersedes the feature order in the original review.
