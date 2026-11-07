@@ -34,8 +34,10 @@ def build_summary(portfolio: Portfolio) -> dict:
     total_cost = float(df["cost_basis"].sum())
 
     by_ticker = (
-        df.groupby(["ticker", "security_name", "asset_class"], sort=False)[["market_value", "cost_basis"]]
-        .sum()
+        df.groupby("ticker", sort=False)
+        .agg(security_name=("security_name", "first"),
+             asset_class=("asset_class", "first"),
+             market_value=("market_value", "sum"), cost_basis=("cost_basis", "sum"))
         .reset_index()
         .sort_values("market_value", ascending=False)
     )
