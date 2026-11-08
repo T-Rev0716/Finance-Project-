@@ -10,6 +10,7 @@ connections and no real client data.
 
 from dataclasses import dataclass, field
 from io import BytesIO, StringIO
+from math import isfinite, fsum
 
 import pandas as pd
 
@@ -93,21 +94,23 @@ def load_portfolio(source, source_name: str = "uploaded.csv") -> Portfolio:
         raise IngestionError(["CSV contains no holdings rows."])
 
     for col in ["ticker", "security_name", "asset_class", "sector", "account_type", "risk_tolerance", "client_goal"]:
-        df[col] = df[col].astype(str).str.strip()
+        missing_text = df[col].isna()
+        df[col] = df[col].astype("string").fillna("").str.strip()
+        for idx in df.index[missing_text | df[col].eq("")].tolist():
+            errors.append(f"Row {idx + 2}: '{col}' is empty.")
 
     for col in NUMERIC_COLUMNS:
         df[col] = pd.to_numeric(df[col], errors="coerce")
-        bad_rows = df.index[df[col].isna()].tolist()
+        bad_rows = df.index[~df[col].map(isfinite)].tolist()
         for idx in bad_rows:
-            errors.append(f"Row {idx + 2}: '{col}' is missing or not a number.")
+            errors.append(f"Row {idx + 2}: '{col}' must be a finite number (no missing values or infinity).")
 
     if not errors:
         for col in NUMERIC_COLUMNS:
             for idx in df.index[df[col] < 0].tolist():
                 errors.append(f"Row {idx + 2}: '{col}' must not be negative.")
 
-    for idx in df.index[df["ticker"].isin(["", "nan"])].tolist():
-        errors.append(f"Row {idx + 2}: 'ticker' is empty.")
+    df["ticker"] = df["ticker"].str.upper()
 
     df["asset_class"] = df["asset_class"].str.title()
     df["risk_tolerance"] = df["risk_tolerance"].str.title()
@@ -124,10 +127,33 @@ def load_portfolio(source, source_name: str = "uploaded.csv") -> Portfolio:
             f"{sorted(VALID_ACCOUNT_TYPES)}."
         )
 
+    # A ticker is the security identity in this single-currency demo. Ambiguous
+    # classifications must be corrected, not silently split or assigned first.
+    for ticker, rows in df.groupby("ticker", sort=False):
+        for column in ["asset_class", "sector"]:
+            if rows[column].str.casefold().nunique() > 1:
+                errors.append(f"Ticker '{ticker}' has conflicting {column} values.")
+
     if errors:
         raise IngestionError(errors)
 
-    if float(df["market_value"].sum()) <= 0:
+    # Equivalent sector spellings should not split an allocation or rule.
+    sector_labels = df.groupby(df["sector"].str.casefold())["sector"].first()
+    df["sector"] = df["sector"].str.casefold().map(sector_labels)
+
+    # Reject overflow before summaries, ratios, and JSON persistence.
+    try:
+        totals = {col: fsum(df[col]) for col in ["market_value", "cost_basis"]}
+    except OverflowError as exc:
+        raise IngestionError(["Portfolio totals exceed the supported numeric range."]) from exc
+    if not all(isfinite(value) for value in totals.values()):
+        raise IngestionError(["Portfolio totals must be finite."])
+    if totals["cost_basis"] > 0 and not isfinite(
+        (totals["market_value"] - totals["cost_basis"]) / totals["cost_basis"] * 100
+    ):
+        raise IngestionError(["Portfolio gain/loss percentage exceeds the supported numeric range."])
+
+    if totals["market_value"] <= 0:
         raise IngestionError(["Total market value must be greater than zero."])
 
     df["unrealized_gain_loss"] = df["market_value"] - df["cost_basis"]
