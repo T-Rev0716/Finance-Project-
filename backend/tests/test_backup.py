@@ -1,5 +1,8 @@
 """Backup/restore safety and post-restore session invalidation."""
 import hashlib
+import importlib.util
+import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -146,3 +149,109 @@ def test_session_epoch_only_moves_forward(live_db):
         assert conn.execute("SELECT not_before FROM session_epoch").fetchone()[0] == 2000.0
     assert security.session_rejection(live_db, "any-session-0123456789", 1999.0)
     assert security.session_rejection(live_db, "any-session-0123456789", 2000.0) is None
+
+
+# --- preflight: restore only when nothing else can be using the database ---------------
+
+def _load_backup_db():
+    spec = importlib.util.spec_from_file_location("backup_db", REPO_ROOT / "backend" / "scripts" / "backup_db.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+backup_db = _load_backup_db()
+linux_only = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="needs Linux /proc and symlinks")
+
+
+def fake_proc(tmp_path, *others):
+    """A /proc listing this process plus `others`, each (pid, argv, open file paths)."""
+    root = tmp_path / "proc"
+    for pid, argv, open_files in [(os.getpid(), [sys.executable, "backup_db.py", "preflight"], []), *others]:
+        (root / str(pid) / "fd").mkdir(parents=True)
+        (root / str(pid) / "cmdline").write_bytes(b"".join(a.encode() + b"\0" for a in argv))
+        for fd, target in enumerate(open_files):
+            os.symlink(target, root / str(pid) / "fd" / str(fd))
+    return root
+
+
+def test_preflight_passes_only_when_nothing_else_uses_the_database(tmp_path, live_db):
+    proc = fake_proc(tmp_path, (4242, ["/usr/sbin/sshd", "-D"], []))
+    assert backup_db.preflight(live_db, proc) == {"processes_checked": 1}
+
+
+@pytest.mark.parametrize("argv", [
+    ["/usr/local/bin/python", "/usr/local/bin/uvicorn", "app.main:app", "--port", "8000"],
+    ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"],  # backend/Dockerfile CMD
+], ids=["uvicorn", "dockerfile-cmd"])
+def test_preflight_refuses_while_the_api_is_running(tmp_path, live_db, argv):
+    with pytest.raises(backup_db.BackupError, match="API is still running"):
+        backup_db.preflight(live_db, fake_proc(tmp_path, (4242, argv, [])))
+
+
+@linux_only
+def test_preflight_refuses_when_a_process_holds_the_database_or_its_journal(tmp_path, live_db):
+    live = os.path.realpath(live_db)
+    proc = fake_proc(tmp_path, (4242, ["python", "worker.py"], ["/dev/null", live]),
+                     (4243, ["python", "other.py"], [live + "-journal"]),
+                     (4244, ["python", "stale.py"], [live + " (deleted)"]))
+    with pytest.raises(backup_db.BackupError) as exc:
+        backup_db.preflight(live_db, proc)
+    assert all(f"process {pid} has" in str(exc.value) for pid in (4242, 4243, 4244))
+
+
+@linux_only
+def test_preflight_finds_a_real_process_holding_the_database(live_db):
+    holder = subprocess.Popen([sys.executable, "-c", (
+        "import sqlite3, sys, time; c = sqlite3.connect(sys.argv[1]);"
+        "c.execute('SELECT COUNT(*) FROM analyses').fetchone(); print('open', flush=True); time.sleep(60)"),
+        str(live_db)], stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "open"
+        with pytest.raises(backup_db.BackupError, match=f"process {holder.pid} has"):
+            backup_db.preflight(live_db)
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+@pytest.mark.parametrize("break_proc", [
+    lambda proc: shutil.rmtree(proc),                                          # no /proc at all
+    lambda proc: shutil.rmtree(proc / str(os.getpid())),                       # /proc of another namespace
+    lambda proc: (proc / "4242" / "cmdline").unlink(),                         # process listed, details missing
+    lambda proc: (shutil.rmtree(proc / "4242" / "fd"), (proc / "4242" / "fd").write_text("")),  # fd list unreadable
+], ids=["no-proc", "self-not-listed", "cmdline-missing", "fd-unreadable"])
+def test_preflight_refuses_when_processes_cannot_be_inspected(tmp_path, live_db, break_proc):
+    proc = fake_proc(tmp_path, (4242, ["python", "worker.py"], []))
+    break_proc(proc)
+    with pytest.raises(backup_db.BackupError, match="(?i)cannot inspect"):
+        backup_db.preflight(live_db, proc)
+
+
+def test_preflight_refuses_without_an_exclusive_lock(tmp_path, live_db):
+    with closing(sqlite3.connect(live_db, isolation_level=None)) as reader:
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM analyses").fetchone()  # Holds a shared lock until ROLLBACK.
+        with pytest.raises(backup_db.BackupError, match="exclusive access"):
+            backup_db.preflight(live_db, fake_proc(tmp_path))
+        reader.execute("ROLLBACK")
+    assert backup_db.preflight(live_db, fake_proc(tmp_path / "again")) == {"processes_checked": 0}
+
+
+def test_preflight_refuses_a_missing_database_without_creating_it(tmp_path):
+    missing = tmp_path / "advisorlens-typo.db"
+    with pytest.raises(backup_db.BackupError, match="not found"):
+        backup_db.preflight(missing, fake_proc(tmp_path))
+    assert not missing.exists()
+
+
+def test_preflight_command_fails_while_the_database_is_open(live_db):
+    """Here /proc is either absent (not Linux) or shows this test holding the file open."""
+    before = digest(live_db)
+    with closing(sqlite3.connect(live_db, isolation_level=None)) as reader:
+        reader.execute("BEGIN")
+        reader.execute("SELECT COUNT(*) FROM analyses").fetchone()
+        r = run("preflight", "--db", live_db)
+        reader.execute("ROLLBACK")
+    assert r.returncode == 1 and "preflight failed" in r.stderr and "Nothing was changed" in r.stderr
+    assert digest(live_db) == before
