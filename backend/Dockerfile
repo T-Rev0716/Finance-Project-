@@ -1,4 +1,4 @@
-# Build context is the repo root (see railway.json's dockerfilePath), so this
+# Build context is the repo root (Railway's dockerfilePath, see .railway/railway.ts), so this
 # can copy both backend/ and the sibling data/samples/ the app reads by default.
 FROM python:3.11-slim
 
