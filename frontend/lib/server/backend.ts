@@ -4,6 +4,7 @@ import type { ServerConfig } from "./config";
 
 const SECRET_HEADER = "x-advisorlens-backend-secret";
 const SESSION_HEADER = "x-advisorlens-session";
+const ISSUED_HEADER = "x-advisorlens-session-issued-at";
 
 /**
  * The only way this server talks to the API: a fixed destination from configuration,
@@ -13,13 +14,21 @@ const SESSION_HEADER = "x-advisorlens-session";
 export async function backendFetch(
   config: ServerConfig,
   path: string,
-  init: { method: string; sessionId?: string; contentType?: string; body?: ArrayBuffer | string },
+  init: {
+    method: string;
+    session?: { sid: string; issuedAt: number };
+    contentType?: string;
+    body?: ArrayBuffer | string;
+  },
 ): Promise<Response> {
   if (!path.startsWith("/") || path.startsWith("//")) throw new Error("Backend paths must be absolute.");
   const url = new URL(path, config.backendUrl);
   if (url.origin !== config.backendUrl.origin) throw new Error("Backend destination is fixed.");
   const headers = new Headers({ [SECRET_HEADER]: config.backendSecret });
-  if (init.sessionId) headers.set(SESSION_HEADER, init.sessionId);
+  if (init.session) {
+    headers.set(SESSION_HEADER, init.session.sid);
+    headers.set(ISSUED_HEADER, String(init.session.issuedAt));
+  }
   if (init.contentType) headers.set("content-type", init.contentType);
   return fetch(url, {
     method: init.method,

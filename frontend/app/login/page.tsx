@@ -23,9 +23,11 @@ export default async function LoginPage({
   const params = await searchParams;
   const next = safeNext(params.next);
   // Skip the form only for a session the API confirms; a signed-out cookie stays here.
+  // A confirmed session is never told it has signed out, whatever the URL says.
   const state = await pageSessionState();
-  if (state === "granted" && params.signedOut === undefined) redirect(next);
+  if (state === "granted") redirect(next);
   const configured = state !== "misconfigured";
+  const signedOut = params.signedOut !== undefined && state === "signed-out";
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-6 font-sans text-slate-900">
@@ -38,7 +40,7 @@ export default async function LoginPage({
           This is a shared demonstration workspace with fictional data. Everyone who signs in with the demo
           password sees and edits the same analyses, households and reports.
         </p>
-        {params.signedOut !== undefined && (
+        {signedOut && (
           <p role="status" className="mt-4 rounded-md bg-emerald-50 p-3 text-sm text-emerald-800">
             You have been signed out.
           </p>

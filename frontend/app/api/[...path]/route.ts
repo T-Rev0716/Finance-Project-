@@ -115,7 +115,7 @@ async function proxy(request: Request, context: Context, method: Method): Promis
   const backendPath = `/${path.map(encodeURIComponent).join("/")}${query.size ? `?${query}` : ""}`;
   let upstream: Response;
   try {
-    upstream = await backendFetch(config, backendPath, { method, sessionId: session.sid, contentType, body });
+    upstream = await backendFetch(config, backendPath, { method, session, contentType, body });
   } catch {
     return jsonError(502, "The analysis service is unavailable. Try again shortly.");
   }

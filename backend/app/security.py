@@ -31,6 +31,8 @@ from . import db
 ENVIRONMENTS = ("production", "development", "test")
 SECRET_HEADER = "x-advisorlens-backend-secret"
 SESSION_HEADER = "x-advisorlens-session"
+# When this API issued the session (its own clock, epoch seconds), returned by /auth/login.
+ISSUED_HEADER = "x-advisorlens-session-issued-at"
 MIN_SECRET_LENGTH = 32
 PUBLIC_PATHS = frozenset({"/health"})
 DOCS_PATHS = frozenset({"/docs", "/docs/oauth2-redirect", "/redoc", "/openapi.json"})
@@ -225,6 +227,37 @@ def is_revoked(db_path, session_id: str) -> bool:
                             (_session_key(session_id),)).fetchone() is not None
 
 
+def invalidate_sessions_before(conn, not_before: float, reason: str) -> None:
+    """Reject every session issued before `not_before` (e.g. after restoring a backup, whose
+    revocation list predates any later sign-outs). Takes an open connection so a restore can
+    apply it to the restored file before that file goes live."""
+    conn.execute(
+        "INSERT INTO session_epoch (id, not_before, reason, set_at) VALUES (1, ?, ?, ?) "
+        "ON CONFLICT(id) DO UPDATE SET not_before = MAX(not_before, excluded.not_before), "
+        "reason = excluded.reason, set_at = excluded.set_at",
+        (not_before, reason, time.time()))
+
+
+def session_rejection(db_path, session_id: str, issued_at: float) -> str | None:
+    """Why this session may not be used, or None if it may."""
+    with closing(db._connect(db_path)) as conn:
+        if conn.execute("SELECT 1 FROM revoked_sessions WHERE session_key = ?",
+                        (_session_key(session_id),)).fetchone():
+            return "This session has been signed out. Sign in again."
+        row = conn.execute("SELECT not_before FROM session_epoch WHERE id = 1").fetchone()
+    if row is not None and issued_at < row[0]:
+        return "Sessions from before the last data restore are no longer valid. Sign in again."
+    return None
+
+
+def _issued_at(raw: bytes) -> float | None:
+    try:
+        value = float(raw.decode("ascii"))
+    except (UnicodeDecodeError, ValueError):
+        return None
+    return value if value > 0 and value != float("inf") else None
+
+
 # --- ASGI middleware ---------------------------------------------------------------
 
 async def _deny(send, status: int, detail: str, auth_reason: str | None = None) -> None:
@@ -262,10 +295,12 @@ class AccessControlMiddleware:
             return await _deny(send, 401, "Backend credentials are missing or invalid.", "credentials")
         if path != LOGIN_PATH:
             session_id = headers.get(SESSION_HEADER.encode(), b"").decode("latin-1")
-            if not SESSION_ID_RE.fullmatch(session_id):
+            issued_at = _issued_at(headers.get(ISSUED_HEADER.encode(), b""))
+            if not SESSION_ID_RE.fullmatch(session_id) or issued_at is None:
                 return await _deny(send, 401, "A signed-in session is required.", "session")
-            if is_revoked(self.db_path_provider(), session_id):
-                return await _deny(send, 401, "This session has been signed out. Sign in again.", "session")
+            rejection = session_rejection(self.db_path_provider(), session_id, issued_at)
+            if rejection:
+                return await _deny(send, 401, rejection, "session")
         return await self.app(scope, receive, send)
 
 
@@ -287,8 +322,9 @@ def router(db_path_provider) -> APIRouter:
 
     @api.post(LOGIN_PATH)
     def login(request: LoginRequest, response: Response):
+        now = time.time()
         try:
-            ok = attempt_login(db_path_provider(), request.password, request.client, load_config())
+            ok = attempt_login(db_path_provider(), request.password, request.client, load_config(), now)
         except LoginThrottled as exc:
             raise HTTPException(429, {"message": "Too many failed sign-in attempts. Try again later.",
                                       "retry_after": exc.retry_after},
@@ -296,7 +332,9 @@ def router(db_path_provider) -> APIRouter:
         if not ok:
             raise HTTPException(401, "Incorrect password.")
         response.headers["cache-control"] = "no-store"
-        return {"ok": True}
+        # The caller stores this and sends it back with every request (ISSUED_HEADER), so
+        # session age is judged on this API's clock, the same clock a restore uses.
+        return {"ok": True, "issued_at": now}
 
     @api.post("/auth/logout", status_code=204)
     def logout(request: LogoutRequest, x_advisorlens_session: str = Header()):

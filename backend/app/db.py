@@ -115,6 +115,12 @@ CREATE TABLE IF NOT EXISTS revoked_sessions (
     expires_at REAL NOT NULL,
     revoked_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS session_epoch (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    not_before REAL NOT NULL,
+    reason TEXT NOT NULL,
+    set_at REAL NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS approved_reports_no_update BEFORE UPDATE ON approved_reports
 BEGIN SELECT RAISE(ABORT, 'Approved reports are immutable.'); END;
 CREATE TRIGGER IF NOT EXISTS approved_reports_no_delete BEFORE DELETE ON approved_reports

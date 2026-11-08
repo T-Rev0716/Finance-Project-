@@ -8,11 +8,13 @@ import type { ServerConfig } from "./config";
 
 // Sealed (encrypted + authenticated) cookie. A tampered or expired cookie unseals to an
 // empty session. `exp` is an absolute expiry checked on every request; sessions are not
-// extended by activity. `sid` lets the backend revoke this session on sign-out.
+// extended by activity. `sid` lets the API revoke this session on sign-out, and
+// `issuedAt` (the API's own clock, epoch seconds) lets it reject sessions issued before a
+// data restore.
 export interface DemoSession {
   sid: string;
   csrf: string;
-  iat: number;
+  issuedAt: number;
   exp: number;
 }
 
@@ -35,19 +37,19 @@ export function isActive(session: IronSession<DemoSession>): session is ActiveSe
   return (
     typeof session.sid === "string" &&
     typeof session.csrf === "string" &&
+    typeof session.issuedAt === "number" &&
     typeof session.exp === "number" &&
     session.exp > Date.now()
   );
 }
 
-export async function startSession(config: ServerConfig): Promise<ActiveSession> {
+export async function startSession(config: ServerConfig, issuedAt: number): Promise<ActiveSession> {
   const session = await getSession(config);
-  const now = Date.now();
   // A fresh ID and CSRF token on every sign-in (no session fixation).
   session.sid = randomUUID();
   session.csrf = randomBytes(32).toString("base64url");
-  session.iat = now;
-  session.exp = now + config.sessionTtlSeconds * 1000;
+  session.issuedAt = issuedAt;
+  session.exp = Date.now() + config.sessionTtlSeconds * 1000;
   await session.save();
   return session as ActiveSession;
 }

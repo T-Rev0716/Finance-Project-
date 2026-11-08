@@ -35,7 +35,7 @@ export async function pageSessionState(): Promise<SessionState> {
   const session = await getSession(config);
   if (!isActive(session)) return "signed-out";
   try {
-    const response = await backendFetch(config, "/auth/session", { method: "GET", sessionId: session.sid });
+    const response = await backendFetch(config, "/auth/session", { method: "GET", session });
     if (response.status === 204) return "granted";
     if (response.status === 401 && response.headers.get("x-advisorlens-auth") === "session") return "signed-out";
     return "unavailable";

@@ -6,6 +6,7 @@ per-run test credentials (ADVISORLENS_ENV=test).
 import json
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -151,11 +152,12 @@ def verify_with_session(browser, page, out, creds):
 
     _assert_signed_out(_context_with_cookie(browser, cookie['value'][:-6] + 'AAAAAA'), 'tampered')
     now = int(time.time() * 1000)
-    expired = _seal({'sid': 'expired-session-0123456789', 'csrf': 'x' * 43, 'iat': now - 9 * 3600_000,
+    # Correctly sealed with the real secret, complete, and only past its expiry.
+    expired = _seal({'sid': 'expired-session-0123456789', 'csrf': 'x' * 43, 'issuedAt': now / 1000 - 9 * 3600,
                      'exp': now - 3600_000}, creds['session_secret'])
     _assert_signed_out(_context_with_cookie(browser, expired), 'expired')
-    forged = _seal({'sid': 'forged-session-0123456789', 'csrf': 'x' * 43, 'iat': now, 'exp': now + 3600_000},
-                   'forged-secret-' + creds['session_secret'])
+    forged = _seal({'sid': 'forged-session-0123456789', 'csrf': 'x' * 43, 'issuedAt': now / 1000,
+                    'exp': now + 3600_000}, 'forged-secret-' + creds['session_secret'])
     _assert_signed_out(_context_with_cookie(browser, forged), 'forged')
     checks.append('tampered-expired-forged-sessions-rejected')
 
@@ -174,6 +176,121 @@ def verify_with_session(browser, page, out, creds):
     assert api.get('/analyses').status == 200  # The first session is unaffected.
     checks.append('signed-out-session-revoked-server-side')
     return checks
+
+
+def _signed_in(browser, creds):
+    context = browser.new_context(viewport={'width': 1280, 'height': 900})
+    page = context.new_page()
+    sign_in(page, creds['password'])
+    return context, page, next(c['value'] for c in context.cookies() if c['name'] == COOKIE_NAME)
+
+
+def _sign_out_problem(page):
+    return page.get_by_role('alert').filter(has_text='You are still signed in.')
+
+
+def _assert_still_signed_in(browser, context, page, cookie, label):
+    """A failed sign-out keeps the session, and the site says so: nothing claims it ended."""
+    assert [c['value'] for c in context.cookies() if c['name'] == COOKIE_NAME] == [cookie], label
+    expect(page).to_have_url(f'{APP_ORIGIN}/workspace')
+    assert context.request.get(API + '/analyses').status == 200, label
+    probe = context.new_page()
+    probe.goto(f'{APP_ORIGIN}/login?signedOut=1')  # A signed-in browser is never told it signed out.
+    expect(probe).to_have_url(f'{APP_ORIGIN}/workspace')
+    probe.close()
+    copy = _context_with_cookie(browser, cookie)  # Not revoked, so a copy still works too.
+    assert copy.request.get(API + '/analyses').status == 200, label
+    copy.close()
+
+
+def _retry_sign_out(browser, context, page, cookie, label):
+    page.get_by_role('button', name='Try sign-out again', exact=True).click()
+    expect(page).to_have_url(f'{APP_ORIGIN}/login?signedOut=1')
+    expect(page.get_by_role('status')).to_have_text('You have been signed out.')
+    assert not [c for c in context.cookies() if c['name'] == COOKIE_NAME], label
+    context.close()
+    _assert_signed_out(_context_with_cookie(browser, cookie), label)
+
+
+def verify_sign_out_failures(browser, out, creds, backend):
+    """Sign-out that does not reach the server, or that the server cannot record, must say
+    so, keep the session usable for a retry, and succeed (revoking the cookie) on retry."""
+    checks = []
+    context, page, cookie = _signed_in(browser, creds)
+    context.set_offline(True)
+    page.get_by_role('button', name='Sign out', exact=True).click()
+    expect(_sign_out_problem(page)).to_contain_text('did not reach the server')
+    page.screenshot(path=str(out / 'access-sign-out-offline.png'))
+    context.set_offline(False)
+    _assert_still_signed_in(browser, context, page, cookie, 'offline')
+    _retry_sign_out(browser, context, page, cookie, 'offline-retry')
+    checks.append('sign-out-offline-reports-failure-then-retry-revokes')
+
+    context, page, cookie = _signed_in(browser, creds)
+    backend.stop()
+    try:
+        r = SameSiteApi(page).post('/auth/logout')
+        assert r.status == 502 and 'still signed in' in r.json()['detail'], r.status
+        assert 'set-cookie' not in r.headers, 'The cookie was cleared although the sign-out was not recorded'
+        page.get_by_role('button', name='Sign out', exact=True).click()
+        expect(_sign_out_problem(page)).to_contain_text('could not record the sign-out')
+        page.screenshot(path=str(out / 'access-sign-out-backend-down.png'))
+    finally:
+        backend.start()
+    _assert_still_signed_in(browser, context, page, cookie, 'backend-down')
+    _retry_sign_out(browser, context, page, cookie, 'backend-down-retry')
+    checks.append('sign-out-backend-unavailable-reports-failure-then-retry-revokes')
+
+    context, page, cookie = _signed_in(browser, creds)
+
+    def strip_csrf(route):
+        route.continue_(headers={k: v for k, v in route.request.headers.items() if k.lower() != 'x-csrf-token'})
+    page.route(f'{API}/auth/logout', strip_csrf)
+    page.get_by_role('button', name='Sign out', exact=True).click()
+    expect(_sign_out_problem(page)).to_contain_text('failed a security check')
+    page.unroute(f'{API}/auth/logout')
+    _assert_still_signed_in(browser, context, page, cookie, 'csrf-refused')
+    _retry_sign_out(browser, context, page, cookie, 'csrf-refused-retry')
+    checks.append('sign-out-refused-reports-failure-then-retry-revokes')
+    return checks
+
+
+def verify_restore_invalidates_sessions(browser, page, out, creds, backend, workdir: Path):
+    """Restoring a backup taken before a sign-out must not revive that session (the backup's
+    sign-out list predates it); every pre-restore session ends and a new sign-in works."""
+    script = [sys.executable, str(ROOT / 'backend' / 'scripts' / 'backup_db.py')]
+    backup = workdir / 'backups' / 'before-sign-out.db'
+    kept, kept_page, kept_cookie = _signed_in(browser, creds)
+    leaving, leaving_page, leaving_cookie = _signed_in(browser, creds)
+    r = subprocess.run([*script, 'backup', '--db', str(backend.db_path), '--out', str(backup)],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    leaving_page.get_by_role('button', name='Sign out', exact=True).click()
+    expect(leaving_page).to_have_url(f'{APP_ORIGIN}/login?signedOut=1')
+    leaving.close()
+    _assert_signed_out(_context_with_cookie(browser, leaving_cookie), 'signed-out-before-restore')
+
+    backend.stop()
+    try:
+        r = subprocess.run([*script, 'restore', '--db', str(backend.db_path), '--from', str(backup)],
+                           capture_output=True, text=True, timeout=120)
+        assert r.returncode == 0, r.stderr
+        assert 'everyone signs in again' in r.stdout, r.stdout
+    finally:
+        backend.start()
+    _assert_signed_out(_context_with_cookie(browser, leaving_cookie), 'signed-out-session-after-restore')
+    for label, cookie in [('kept-session-after-restore', kept_cookie),
+                          ('harness-session-after-restore',
+                           next(c['value'] for c in page.context.cookies() if c['name'] == COOKIE_NAME))]:
+        _assert_signed_out(_context_with_cookie(browser, cookie), label)
+    kept_page.goto(f'{APP_ORIGIN}/workspace')
+    expect(kept_page).to_have_url(f'{APP_ORIGIN}/login?next=%2Fworkspace')
+    kept.close()
+    fresh, fresh_page, _ = _signed_in(browser, creds)
+    assert fresh.request.get(API + '/analyses').status == 200
+    fresh_page.screenshot(path=str(out / 'access-after-restore.png'))
+    fresh.close()
+    return ['restore-ends-pre-restore-sessions-including-signed-out-ones']
 
 
 def _scan(text: bytes, secrets: list[str], where: str, found: list[str]):

@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -15,16 +16,24 @@ TEST_BACKEND_SECRET = "test-backend-secret-0123456789abcdefghijklmnop"
 TEST_PASSWORD = "test-demo-password"
 TEST_SESSION_ID = "test-session-0123456789abcdef"
 
+# The suite must not depend on the shell it runs in: drop inherited AdvisorLens settings
+# (database path, LLM provider, secrets) so only what the tests set below applies. The
+# Chromium location is a property of the machine, not of the app, so it is kept.
+for _name in [n for n in os.environ if n.startswith("ADVISORLENS_") and n != "ADVISORLENS_CHROMIUM_PATH"]:
+    del os.environ[_name]
+
 from app import security  # noqa: E402
 
 os.environ["ADVISORLENS_ENV"] = "test"
 os.environ["ADVISORLENS_BACKEND_SECRET"] = TEST_BACKEND_SECRET
-os.environ.pop("ADVISORLENS_BACKEND_SECRET_PREVIOUS", None)
 os.environ["ADVISORLENS_DEMO_PASSWORD_HASH"] = security.hash_password(TEST_PASSWORD, n=2**12)
+
+TEST_SESSION_ISSUED_AT = time.time()
 
 AUTH_HEADERS = {
     security.SECRET_HEADER: TEST_BACKEND_SECRET,
     security.SESSION_HEADER: TEST_SESSION_ID,
+    security.ISSUED_HEADER: str(TEST_SESSION_ISSUED_AT),
 }
 
 

@@ -13,14 +13,21 @@ function redirectToSignIn(): void {
 }
 
 function getCsrfToken(): Promise<string> {
-  csrfToken ??= fetch(`${API_BASE}/auth/session`, { cache: "no-store" }).then(async (response) => {
-    if (!response.ok) {
-      csrfToken = null;
-      if (response.status === 401) redirectToSignIn();
-      throw new Error("Your session has ended. Sign in again.");
-    }
-    return (await response.json()).csrfToken as string;
-  });
+  csrfToken ??= fetch(`${API_BASE}/auth/session`, { cache: "no-store" })
+    .then(async (response) => {
+      if (!response.ok) {
+        if (response.status === 401) {
+          redirectToSignIn();
+          throw new Error("Your session has ended. Sign in again.");
+        }
+        throw new Error("The server could not confirm your session. Try again in a moment.");
+      }
+      return (await response.json()).csrfToken as string;
+    })
+    .catch((error: unknown) => {
+      csrfToken = null; // Never cache a failure (e.g. offline): the next request asks again.
+      throw error;
+    });
   return csrfToken;
 }
 

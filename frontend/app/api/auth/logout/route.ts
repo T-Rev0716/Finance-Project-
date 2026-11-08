@@ -3,7 +3,8 @@ import { jsonError, loadConfig, NO_STORE, sameOrigin } from "@/lib/server/guard"
 import { getSession, isActive, sameToken } from "@/lib/server/session";
 
 // Sign-out revokes the session ID on the API (so a copied cookie stops working
-// everywhere) and clears the cookie in this browser.
+// everywhere) and only then clears the cookie in this browser. If revocation fails the
+// cookie is kept, so the browser can retry and is not told it has signed out.
 export async function POST(request: Request): Promise<Response> {
   const config = loadConfig();
   if (config instanceof Response) return config;
@@ -21,7 +22,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const upstream = await backendFetch(config, "/auth/logout", {
       method: "POST",
-      sessionId: session.sid,
+      session,
       contentType: "application/json",
       body: JSON.stringify({ expires_at: session.exp / 1000 }),
     });
@@ -32,9 +33,9 @@ export async function POST(request: Request): Promise<Response> {
   } catch {
     revoked = false;
   }
-  session.destroy();
   if (!revoked) {
-    return jsonError(502, "Signed out in this browser, but the server could not record the sign-out.");
+    return jsonError(502, "The server could not record the sign-out, so you are still signed in. Try again shortly.");
   }
+  session.destroy();
   return new Response(null, { status: 204, headers: NO_STORE });
 }

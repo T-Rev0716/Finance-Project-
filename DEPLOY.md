@@ -34,7 +34,8 @@ Browser ──HTTPS──▶ Next.js (Vercel)  ──HTTPS + backend secret + se
 | Cookie | Sealed (encrypted + authenticated) with `iron-session`. `HttpOnly`, `SameSite=Lax`, `Path=/`; in production also `Secure` with the `__Host-` prefix. |
 | Expiration | Absolute: `ADVISORLENS_SESSION_TTL_HOURS` (default 8) after sign-in, not extended by activity. Expired cookies are treated as signed out. |
 | Tampering | A modified or forged cookie fails authentication and is treated as signed out. |
-| Sign-out | Revokes that session ID on the API (stored hashed in SQLite until it would have expired) and clears the cookie. A copied cookie stops working everywhere. |
+| Sign-out | Revokes that session ID on the API (stored hashed in SQLite until it would have expired), then clears the cookie. A copied cookie stops working everywhere. If the request does not reach the server, or the API cannot record the revocation, the page says "You are still signed in", keeps the cookie and offers **Try sign-out again**; it never reports a sign-out that did not happen. |
+| Restore | Restoring a backup ends every session issued before the restore, including sessions signed out after the backup was taken (whose revocations the backup does not contain). Everyone signs in again. |
 | Revoke everyone | Rotate `ADVISORLENS_SESSION_SECRET` (see below): every existing cookie becomes invalid. |
 | Password change | Generate a new hash and update the API. Existing sessions continue until they expire unless you also rotate the session secret. |
 | CSRF | Every state-changing request needs both the site's own `Origin` and a per-session CSRF token header. Cross-origin form posts and fetches are refused with 403. |
@@ -130,7 +131,11 @@ either way.
 ## Backups and restore
 
 All state is one SQLite file on the Railway volume. `backend/scripts/backup_db.py` uses
-SQLite's online backup API (safe while the API runs) and verifies the result.
+SQLite's online backup API (safe while the API runs). Every source is opened read-only and
+must already exist, so a mistyped path fails instead of creating an empty database. Before
+anything is written, the source must pass SQLite's integrity check and match the
+AdvisorLens schema; the new file is then validated again before it replaces anything. On
+any failure the command exits non-zero and the destination is unchanged.
 
 ```bash
 # Back up (from a Railway shell: `railway ssh`, or Settings → Shell):
@@ -142,16 +147,23 @@ python /app/backend/scripts/backup_db.py backup --db /data/advisorlens.db \
 python /app/backend/scripts/backup_db.py verify --db /data/backups/<file>.db
 
 # Restore: stop traffic first (Railway: remove the domain or scale the service to 0
-# replicas from a one-off shell), then:
+# replicas from a one-off shell), then, on the API's own host:
 python /app/backend/scripts/backup_db.py restore --db /data/advisorlens.db \
   --from /data/backups/<file>.db
-# The current file is kept as advisorlens.db.pre-restore-<timestamp>. Restart the service
-# and confirm the analyses list in the workspace.
+# The current file is kept as advisorlens.db.pre-restore-<timestamp>. Restart the service,
+# sign in again and confirm the analyses list in the workspace.
 ```
 
-The round trip (backup → later writes → restore → earlier state, previous file kept,
-no overwrite of existing backups) is covered by `backend/tests/test_security.py`.
-Practice a restore before relying on it; a backup you have not restored is unproven.
+A restore records the restore time in the restored database, and the API then rejects
+every session issued before it. Run the restore on the API host, whose clock sets that
+cutoff. No secret rotation is needed for this; still rotate the session secret if you
+restored because of a suspected compromise.
+
+Covered by `backend/tests/test_backup.py` (round trip, previous file kept, no overwrite of
+existing backups, missing/empty/foreign/corrupt sources rejected with the destination
+unchanged, signed-out sessions not revived by a restore) and by the browser harness
+(back up, sign out, restore, then replay the signed-out cookie). Practice a restore before
+relying on it; a backup you have not restored is unproven.
 
 ## Local development and tests
 
@@ -174,3 +186,6 @@ Automated tests and the browser harness use explicit test credentials
 - No production request rate limiting beyond sign-in throttling; add platform-level limits
   before wider exposure.
 - No retention policy beyond keeping everything; delete the volume data when the demo ends.
+- Sign-out needs the API. While it is unreachable a session cannot be revoked and stays
+  valid until it expires or is revoked later; rotate the session secret to end every
+  session without the API.

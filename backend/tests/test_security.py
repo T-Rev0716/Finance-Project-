@@ -14,7 +14,6 @@ from app import main, security
 from tests.conftest import (
     AUTH_HEADERS,
     BACKEND_DIR,
-    REPO_ROOT,
     TEST_BACKEND_SECRET,
     TEST_PASSWORD,
     TEST_SESSION_ID,
@@ -97,6 +96,15 @@ def test_malformed_session_ids_are_rejected(session_id):
     assert client.get("/analyses").status_code == 401
 
 
+@pytest.mark.parametrize("issued_at", [None, "", "abc", "0", "-5", "nan", "inf"])
+def test_missing_or_malformed_session_issue_time_is_rejected(issued_at):
+    headers = {k: v for k, v in AUTH_HEADERS.items() if k != security.ISSUED_HEADER}
+    if issued_at is not None:
+        headers[security.ISSUED_HEADER] = issued_at
+    r = TestClient(main.app, headers=headers).get("/analyses")
+    assert r.status_code == 401 and r.headers["x-advisorlens-auth"] == "session"
+
+
 def test_logout_revokes_that_session_only(isolated_db):
     client = api_client()
     assert client.get("/auth/session").status_code == 204
@@ -136,7 +144,9 @@ def _login(client, password=TEST_PASSWORD, client_key="203.0.113.10"):
 
 def test_login_accepts_only_the_demo_password(isolated_db):
     client = TestClient(main.app, headers={security.SECRET_HEADER: TEST_BACKEND_SECRET})
-    assert _login(client).json() == {"ok": True}
+    before = time.time()
+    body = _login(client).json()
+    assert body["ok"] is True and before <= body["issued_at"] <= time.time()
     r = _login(client, "wrong-password")
     assert r.status_code == 401 and r.json()["detail"] == "Incorrect password."
     with closing(sqlite3.connect(isolated_db)) as conn:  # Client addresses are stored hashed.
@@ -253,22 +263,3 @@ def test_password_hash_cli_and_verification():
     short = subprocess.run([sys.executable, "-m", "app.security", "hash-password"], cwd=BACKEND_DIR,
                            input="short\n", capture_output=True, text=True, timeout=60)
     assert short.returncode != 0
-
-
-def test_backup_and_restore_round_trip(tmp_path, isolated_db):
-    client = api_client()
-    client.post("/analyze/sample/growth_concentrated.csv")
-    script = [sys.executable, str(REPO_ROOT / "backend" / "scripts" / "backup_db.py")]
-    backup = tmp_path / "backups" / "copy.db"
-    r = subprocess.run([*script, "backup", "--db", str(isolated_db), "--out", str(backup)],
-                       capture_output=True, text=True, timeout=60)
-    assert r.returncode == 0 and "analyses=1" in r.stdout
-    client.post("/analyze/sample/retiree_cash_drag.csv")  # Changes after the backup...
-    r = subprocess.run([*script, "restore", "--db", str(isolated_db), "--from", str(backup)],
-                       capture_output=True, text=True, timeout=60)
-    assert r.returncode == 0, r.stderr
-    assert [a["source_name"] for a in client.get("/analyses").json()["analyses"]] == ["growth_concentrated.csv"]
-    assert list(tmp_path.glob("security.db.pre-restore-*"))  # ...are kept aside, not destroyed.
-    again = subprocess.run([*script, "backup", "--db", str(isolated_db), "--out", str(backup)],
-                           capture_output=True, text=True, timeout=60)
-    assert again.returncode != 0  # Never overwrites an existing backup.

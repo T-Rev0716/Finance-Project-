@@ -33,7 +33,12 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   if (upstream.status === 200) {
-    const session = await startSession(config);
+    const issuedAt = (await upstream.json().catch(() => ({}))).issued_at;
+    if (typeof issuedAt !== "number" || !Number.isFinite(issuedAt) || issuedAt <= 0) {
+      console.error("AdvisorLens sign-in response did not include a valid issue time.");
+      return jsonError(502, "Sign-in is unavailable right now. Try again shortly.");
+    }
+    const session = await startSession(config, issuedAt);
     return Response.json({ ok: true, expiresAt: session.exp }, { headers: NO_STORE });
   }
   if (upstream.status === 401) return jsonError(401, "Incorrect password.");

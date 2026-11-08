@@ -18,7 +18,8 @@ from playwright.sync_api import sync_playwright, expect
 
 from harness_api import SameSiteApi, sign_in
 from verify_access_protection import (verify_before_sign_in, verify_exports_protected_after_workflow,
-                                      verify_no_secret_exposure, verify_with_session)
+                                      verify_no_secret_exposure, verify_restore_invalidates_sessions,
+                                      verify_sign_out_failures, verify_with_session)
 from verify_client_report import verify_client_report
 from verify_households import verify_households
 
@@ -41,6 +42,30 @@ def ready(url):
     raise RuntimeError(f'Service did not start: {url}')
 
 
+class Backend:
+    """The API process, which the access checks stop and restart (unavailable backend,
+    restore from backup) against the same database and credentials."""
+
+    def __init__(self, env, log):
+        self.env, self.log, self.process = env, log, None
+        self.db_path = Path(env['ADVISORLENS_DB'])
+
+    def start(self):
+        self.process = subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'],
+                                        cwd=ROOT/'backend', env=self.env, stdout=self.log, stderr=self.log)
+        ready('http://127.0.0.1:8000/health')
+
+    def stop(self):
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        self.process = None
+
+
 with tempfile.TemporaryDirectory() as temporary:
     log = open(OUT / 'services.log', 'w')
     try:
@@ -60,9 +85,9 @@ with tempfile.TemporaryDirectory() as temporary:
                'ADVISORLENS_TRUST_PROXY_HEADERS': 'true'}
         if os.environ.get('ADVISORLENS_CHROMIUM_PATH'):
             env['ADVISORLENS_CHROMIUM_PATH'] = os.environ['ADVISORLENS_CHROMIUM_PATH']
-        processes.append(subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'], cwd=ROOT/'backend', env=env, stdout=log, stderr=log))
+        backend = Backend(env, log)
+        backend.start()
         processes.append(subprocess.Popen(['npm', 'run', 'start', '--', '--hostname', '127.0.0.1', '--port', '3100'], cwd=ROOT/'frontend', env=env, stdout=log, stderr=log, start_new_session=True))
-        ready('http://127.0.0.1:8000/health')
         ready('http://127.0.0.1:3100/login')
         with sync_playwright() as p:
             launch = {'executable_path': os.environ['ADVISORLENS_CHROMIUM_PATH']} if os.environ.get('ADVISORLENS_CHROMIUM_PATH') else {}
@@ -73,6 +98,7 @@ with tempfile.TemporaryDirectory() as temporary:
             page.on('pageerror', lambda e: errors.append(str(e)))
             sign_in(page, creds['password'])
             access_checks += verify_with_session(browser, page, OUT, creds)
+            access_checks += verify_sign_out_failures(browser, OUT, creds, backend)
             api = SameSiteApi(page)
             page.goto('http://127.0.0.1:3100/workspace')
             page.get_by_role('button', name='growth concentrated', exact=True).click()
@@ -129,10 +155,14 @@ with tempfile.TemporaryDirectory() as temporary:
             access_checks += verify_exports_protected_after_workflow(browser)
             scan_checks, scanned_urls, scanned_files = verify_no_secret_exposure(browser, page, creds)
             access_checks += scan_checks
+            # Last: a restore invalidates every session, including the one used above.
+            access_checks += verify_restore_invalidates_sessions(browser, page, OUT, creds, backend, Path(temporary))
             (OUT/'access-result.json').write_text(json.dumps({'status': 'passed', 'checks': access_checks,
                 'scanned_response_urls': scanned_urls, 'scanned_static_files': scanned_files}))
             browser.close()
     finally:
+        if 'backend' in globals():
+            backend.stop()
         for process in reversed(processes):
             process.terminate()
             try:
