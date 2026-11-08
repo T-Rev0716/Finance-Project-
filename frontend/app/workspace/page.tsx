@@ -3,12 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import AdvisorReviewQueue from "@/components/AdvisorReviewQueue";
 import BriefView from "@/components/BriefView";
 import HistoryView from "@/components/HistoryView";
 import {
   AllocationItem,
   AnalysisResult,
-  Flag,
   GeneratorInfo,
   analyzeSample,
   analyzeUpload,
@@ -17,12 +17,6 @@ import {
   formatMoney,
   getAnalysis,
 } from "@/lib/api";
-
-const SEVERITY_STYLES: Record<Flag["severity"], string> = {
-  high: "bg-red-100 text-red-800 border-red-200",
-  medium: "bg-amber-100 text-amber-800 border-amber-200",
-  info: "bg-sky-100 text-sky-800 border-sky-200",
-};
 
 export default function Workspace() {
   const [samples, setSamples] = useState<string[]>([]);
@@ -210,41 +204,7 @@ function Results({
         </div>
       </section>
 
-      <section className="rounded-lg border bg-white p-5">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
-          Advisor review items
-        </h2>
-        {flags.length === 0 ? (
-          <p className="text-sm text-slate-500">
-            No review thresholds were exceeded for this portfolio.
-          </p>
-        ) : (
-          <ul className="space-y-3">
-            {flags.map((flag, i) => (
-              <li key={`${flag.rule_id}-${i}`} className="rounded-md border p-4">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full border px-2 py-0.5 text-xs font-medium ${SEVERITY_STYLES[flag.severity]}`}
-                  >
-                    {flag.severity}
-                  </span>
-                  <span className="font-medium">{flag.title}</span>
-                  <span className="ml-auto text-xs text-slate-400">{flag.rule_id}</span>
-                </div>
-                <p className="mt-2 text-sm text-slate-600">{flag.message}</p>
-                <details className="mt-2 text-xs text-slate-500">
-                  <summary className="cursor-pointer">
-                    Evidence · threshold: {flag.threshold}
-                  </summary>
-                  <pre className="mt-1 overflow-x-auto rounded bg-slate-50 p-2">
-                    {JSON.stringify(flag.evidence, null, 2)}
-                  </pre>
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <AdvisorReviewQueue key={result.analysis_id} analysisId={result.analysis_id} />
 
       <div className="grid gap-6 md:grid-cols-2">
         <AllocationCard title="Asset allocation" items={summary.asset_allocation} />
@@ -255,7 +215,7 @@ function Results({
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">
           Top holdings
         </h2>
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto"><table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-xs uppercase text-slate-400">
               <th className="py-2">Ticker</th>
@@ -282,7 +242,7 @@ function Results({
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       <BriefView

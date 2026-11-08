@@ -213,3 +213,42 @@ export function formatMoney(value: number): string {
     maximumFractionDigits: 0,
   });
 }
+
+export type ReviewStatus = "open" | "discussed" | "follow_up" | "resolved";
+export interface ReviewEvent {
+  finding_id: string;
+  status: ReviewStatus;
+  note: string;
+  version: number;
+  created_at: string;
+}
+export interface FindingReview {
+  finding_id: string;
+  flag: Flag;
+  status: ReviewStatus;
+  note: string;
+  version: number;
+  updated_at: string | null;
+  history: ReviewEvent[];
+}
+export async function getReviews(analysisId: number): Promise<FindingReview[]> {
+  const response = await fetch(`${API_BASE}/analyses/${analysisId}/reviews`, { cache: "no-store" });
+  if (!response.ok) throw new Error("Unable to load saved review decisions. Try again.");
+  return (await response.json()).items;
+}
+export class ReviewSaveError extends Error {
+  constructor(message: string, public statusCode: number) { super(message); }
+}
+export async function saveReview(analysisId: number, findingId: string, update: {
+  status: ReviewStatus; note: string; expected_version: number;
+}): Promise<Omit<FindingReview, "flag" | "history">> {
+  const response = await fetch(`${API_BASE}/analyses/${analysisId}/reviews/${findingId}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(update),
+  });
+  if (!response.ok) {
+    const body = await response.json();
+    const detail = typeof body.detail === "string" ? body.detail : "Review could not be saved. Check the status and note (maximum 4,000 characters).";
+    throw new ReviewSaveError(detail, response.status);
+  }
+  return response.json();
+}

@@ -38,6 +38,25 @@ CREATE TABLE IF NOT EXISTS audit_log (
     detail_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS finding_reviews (
+    analysis_id INTEGER NOT NULL REFERENCES analyses(id),
+    finding_id TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('open','discussed','follow_up','resolved')),
+    note TEXT NOT NULL DEFAULT '',
+    version INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (analysis_id, finding_id)
+);
+CREATE TABLE IF NOT EXISTS review_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    analysis_id INTEGER NOT NULL REFERENCES analyses(id),
+    finding_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL,
+    version INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (analysis_id, finding_id, version)
+);
 CREATE TABLE IF NOT EXISTS briefs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     analysis_id INTEGER NOT NULL REFERENCES analyses(id),
