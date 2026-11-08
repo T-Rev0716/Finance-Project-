@@ -1,4 +1,45 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// All API traffic goes to this site's own authenticated server routes, which forward
+// to the analysis service with a server-only credential. No API URL or secret is
+// configured in the browser.
+export const API_BASE = "/api";
+
+let csrfToken: Promise<string> | null = null;
+
+function redirectToSignIn(): void {
+  if (typeof window === "undefined" || window.location.pathname === "/login") return;
+  // Full navigation so the server re-checks access and in-memory data is discarded.
+  // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);
+}
+
+function getCsrfToken(): Promise<string> {
+  csrfToken ??= fetch(`${API_BASE}/auth/session`, { cache: "no-store" }).then(async (response) => {
+    if (!response.ok) {
+      csrfToken = null;
+      if (response.status === 401) redirectToSignIn();
+      throw new Error("Your session has ended. Sign in again.");
+    }
+    return (await response.json()).csrfToken as string;
+  });
+  return csrfToken;
+}
+
+/** Fetch an API route with the session cookie, adding the CSRF token to state-changing requests. */
+export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const send = async () => {
+    const headers = new Headers(init.headers);
+    if (method !== "GET") headers.set("X-CSRF-Token", await getCsrfToken());
+    return fetch(`${API_BASE}${path}`, { ...init, headers, cache: "no-store", credentials: "same-origin" });
+  };
+  let response = await send();
+  if (response.status === 403 && method !== "GET") {
+    csrfToken = null; // The session may have been replaced by a sign-in in another tab.
+    response = await send();
+  }
+  if (response.status === 401) redirectToSignIn();
+  return response;
+}
 
 export interface AllocationItem {
   name: string;
@@ -119,14 +160,14 @@ export const FALLBACK_DISCLAIMER =
   "not provide investment, tax, or legal advice.";
 
 export async function fetchSamples(): Promise<string[]> {
-  const res = await fetch(`${API_BASE}/samples`);
+  const res = await apiFetch("/samples");
   if (!res.ok) throw new Error(`Failed to load samples (${res.status})`);
   const body = await res.json();
   return body.samples;
 }
 
 export async function analyzeSample(name: string): Promise<AnalysisResult> {
-  const res = await fetch(`${API_BASE}/analyze/sample/${encodeURIComponent(name)}`, {
+  const res = await apiFetch(`/analyze/sample/${encodeURIComponent(name)}`, {
     method: "POST",
   });
   return handleAnalysisResponse(res);
@@ -135,18 +176,18 @@ export async function analyzeSample(name: string): Promise<AnalysisResult> {
 export async function analyzeUpload(file: File): Promise<AnalysisResult> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE}/analyze/upload`, { method: "POST", body: form });
+  const res = await apiFetch("/analyze/upload", { method: "POST", body: form });
   return handleAnalysisResponse(res);
 }
 
 export async function listAnalyses(): Promise<SavedAnalysis[]> {
-  const res = await fetch(`${API_BASE}/analyses`);
+  const res = await apiFetch("/analyses");
   if (!res.ok) throw new Error(`Failed to load saved analyses (${res.status})`);
   return (await res.json()).analyses;
 }
 
 export async function getAnalysis(id: number): Promise<AnalysisResult> {
-  const res = await fetch(`${API_BASE}/analyses/${id}`);
+  const res = await apiFetch(`/analyses/${id}`);
   if (!res.ok) throw new Error(`Failed to load analysis ${id} (${res.status})`);
   const stored = await res.json();
   // Adapt the stored record to the analyze-response shape used by the dashboard.
@@ -167,20 +208,20 @@ export async function getAnalysis(id: number): Promise<AnalysisResult> {
 }
 
 export async function getBrief(analysisId: number): Promise<Brief> {
-  const res = await fetch(`${API_BASE}/analyses/${analysisId}/brief`);
+  const res = await apiFetch(`/analyses/${analysisId}/brief`);
   if (!res.ok) throw new Error(`Failed to generate brief (${res.status})`);
   return res.json();
 }
 
 export async function regenerateBrief(analysisId: number, generator?: string): Promise<Brief> {
   const query = generator ? `?generator=${encodeURIComponent(generator)}` : "";
-  const res = await fetch(`${API_BASE}/analyses/${analysisId}/brief${query}`, { method: "POST" });
+  const res = await apiFetch(`/analyses/${analysisId}/brief${query}`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to generate brief (${res.status})`);
   return res.json();
 }
 
 export async function fetchGeneratorInfo(): Promise<GeneratorInfo> {
-  const res = await fetch(`${API_BASE}/health`);
+  const res = await apiFetch("/generator");
   if (!res.ok) throw new Error(`Failed to load generator info (${res.status})`);
   const body = await res.json();
   return {
@@ -232,7 +273,7 @@ export interface FindingReview {
   history: ReviewEvent[];
 }
 export async function getReviews(analysisId: number): Promise<FindingReview[]> {
-  const response = await fetch(`${API_BASE}/analyses/${analysisId}/reviews`, { cache: "no-store" });
+  const response = await apiFetch(`/analyses/${analysisId}/reviews`);
   if (!response.ok) throw new Error("Unable to load saved review decisions. Try again.");
   return (await response.json()).items;
 }
@@ -242,7 +283,7 @@ export class ReviewSaveError extends Error {
 export async function saveReview(analysisId: number, findingId: string, update: {
   status: ReviewStatus; note: string; expected_version: number;
 }): Promise<Omit<FindingReview, "flag" | "history">> {
-  const response = await fetch(`${API_BASE}/analyses/${analysisId}/reviews/${findingId}`, {
+  const response = await apiFetch(`/analyses/${analysisId}/reviews/${findingId}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(update),
   });
   if (!response.ok) {

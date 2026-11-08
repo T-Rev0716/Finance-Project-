@@ -9,9 +9,11 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "iron-session": "^9.0.1",
     "next": "16.4.5",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

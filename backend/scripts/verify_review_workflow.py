@@ -1,10 +1,12 @@
-"""Browser acceptance check; requires built frontend and installed Chromium.
+"""Browser acceptance check with demo access protection enabled.
 
-Runs isolated synthetic services and keeps screenshots under the requested folder.
+Requires a built frontend and Chromium. Runs isolated synthetic services with explicit
+per-run test credentials and keeps screenshots under the requested folder.
 Usage: python backend/scripts/verify_review_workflow.py [artifact-directory]
 """
 import json
 import os
+import secrets
 from pathlib import Path
 import subprocess
 import sys
@@ -13,10 +15,16 @@ import time
 from urllib.request import urlopen
 
 from playwright.sync_api import sync_playwright, expect
+
+from harness_api import SameSiteApi, sign_in
+from verify_access_protection import (verify_before_sign_in, verify_exports_protected_after_workflow,
+                                      verify_no_secret_exposure, verify_with_session)
 from verify_client_report import verify_client_report
 from verify_households import verify_households
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / 'backend'))
+from app.security import hash_password  # noqa: E402
 OUT = Path(sys.argv[1] if len(sys.argv) > 1 else '/tmp/advisorlens-browser-evidence')
 OUT.mkdir(parents=True, exist_ok=True)
 processes = []
@@ -36,19 +44,36 @@ def ready(url):
 with tempfile.TemporaryDirectory() as temporary:
     log = open(OUT / 'services.log', 'w')
     try:
-        env = {**os.environ, 'ADVISORLENS_DB': str(Path(temporary) / 'demo.db'),
-               'ADVISORLENS_CORS_ORIGINS': 'http://127.0.0.1:3100',
-               'ADVISORLENS_BRIEF_GENERATOR': 'deterministic-v1'}
+        # Explicit test credentials, random per run; never a fallback to an unprotected mode.
+        creds = {'password': 'harness-demo-password',
+                 'backend_secret': 'harness-backend-' + secrets.token_urlsafe(24),
+                 'session_secret': 'harness-session-' + secrets.token_urlsafe(24)}
+        env = {**{k: v for k, v in os.environ.items() if not k.startswith('ADVISORLENS_')},
+               'ADVISORLENS_ENV': 'test',
+               'ADVISORLENS_DB': str(Path(temporary) / 'demo.db'),
+               'ADVISORLENS_BRIEF_GENERATOR': 'deterministic-v1',
+               'ADVISORLENS_BACKEND_SECRET': creds['backend_secret'],
+               'ADVISORLENS_DEMO_PASSWORD_HASH': hash_password(creds['password']),
+               'ADVISORLENS_SESSION_SECRET': creds['session_secret'],
+               'ADVISORLENS_BACKEND_URL': 'http://127.0.0.1:8000',
+               'ADVISORLENS_PUBLIC_ORIGIN': 'http://127.0.0.1:3100',
+               'ADVISORLENS_TRUST_PROXY_HEADERS': 'true'}
+        if os.environ.get('ADVISORLENS_CHROMIUM_PATH'):
+            env['ADVISORLENS_CHROMIUM_PATH'] = os.environ['ADVISORLENS_CHROMIUM_PATH']
         processes.append(subprocess.Popen([sys.executable, '-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'], cwd=ROOT/'backend', env=env, stdout=log, stderr=log))
         processes.append(subprocess.Popen(['npm', 'run', 'start', '--', '--hostname', '127.0.0.1', '--port', '3100'], cwd=ROOT/'frontend', env=env, stdout=log, stderr=log, start_new_session=True))
         ready('http://127.0.0.1:8000/health')
-        ready('http://127.0.0.1:3100/workspace')
+        ready('http://127.0.0.1:3100/login')
         with sync_playwright() as p:
             launch = {'executable_path': os.environ['ADVISORLENS_CHROMIUM_PATH']} if os.environ.get('ADVISORLENS_CHROMIUM_PATH') else {}
             browser = p.chromium.launch(**launch)
-            page = browser.new_page(viewport={'width':1440, 'height':1000})
+            access_checks = verify_before_sign_in(browser, OUT, creds)
+            page = browser.new_context(viewport={'width':1440, 'height':1000}).new_page()
             errors = []
             page.on('pageerror', lambda e: errors.append(str(e)))
+            sign_in(page, creds['password'])
+            access_checks += verify_with_session(browser, page, OUT, creds)
+            api = SameSiteApi(page)
             page.goto('http://127.0.0.1:3100/workspace')
             page.get_by_role('button', name='growth concentrated', exact=True).click()
             card = page.get_by_role('article').first
@@ -74,10 +99,10 @@ with tempfile.TemporaryDirectory() as temporary:
             page.screenshot(path=str(OUT/'queue-desktop.png'), full_page=True)
 
             # A concurrent API update must cause a visible conflict, not lost notes.
-            aid = page.request.get('http://127.0.0.1:8000/analyses').json()['analyses'][0]['id']
-            item = page.request.get(f'http://127.0.0.1:8000/analyses/{aid}/reviews').json()['items'][0]
-            endpoint = f"http://127.0.0.1:8000/analyses/{aid}/reviews/{item['finding_id']}"
-            assert page.request.put(endpoint, data={'status':'discussed','note':'Saved from another tab.','expected_version':item['version']}).status == 200
+            aid = api.get('/analyses').json()['analyses'][0]['id']
+            item = api.get(f'/analyses/{aid}/reviews').json()['items'][0]
+            endpoint = f"/analyses/{aid}/reviews/{item['finding_id']}"
+            assert api.put(endpoint, data={'status':'discussed','note':'Saved from another tab.','expected_version':item['version']}).status == 200
             card.get_by_label('Advisor note', exact=True).fill('Stale local draft.')
             card.get_by_role('button', name='Save review', exact=True).click()
             expect(card.get_by_role('alert')).to_contain_text('updated elsewhere')
@@ -89,7 +114,7 @@ with tempfile.TemporaryDirectory() as temporary:
             assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Mobile page overflows'
             assert not errors, errors
             # Existing print endpoint must still yield an actual PDF.
-            pdf = page.request.get(f'http://127.0.0.1:8000/analyses/{aid}/brief/pdf')
+            pdf = api.get(f'/analyses/{aid}/brief/pdf')
             assert pdf.status == 200 and pdf.body().startswith(b'%PDF')
             (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':['save','reload','resolve-note-required','history','stale-update-conflict','mobile-overflow','no-page-errors','pdf-export']}))
             for name, check in [('household', verify_households), ('report', verify_client_report)]:
@@ -101,6 +126,11 @@ with tempfile.TemporaryDirectory() as temporary:
                     (OUT/'page-errors.json').write_text(json.dumps(errors))
                     raise
             assert not errors, errors
+            access_checks += verify_exports_protected_after_workflow(browser)
+            scan_checks, scanned_urls, scanned_files = verify_no_secret_exposure(browser, page, creds)
+            access_checks += scan_checks
+            (OUT/'access-result.json').write_text(json.dumps({'status': 'passed', 'checks': access_checks,
+                'scanned_response_urls': scanned_urls, 'scanned_static_files': scanned_files}))
             browser.close()
     finally:
         for process in reversed(processes):

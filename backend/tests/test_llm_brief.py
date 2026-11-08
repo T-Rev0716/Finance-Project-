@@ -14,7 +14,7 @@ from app.llm_brief import (
     validate_llm_payload,
 )
 from app.service import analyze_csv
-from tests.conftest import SAMPLES_DIR
+from tests.conftest import api_client, SAMPLES_DIR
 
 
 def _analysis_for(tmp_path, csv_bytes: bytes, name: str) -> dict:
@@ -325,18 +325,18 @@ def test_stored_brief_and_audit_include_llm_metadata(tmp_path, monkeypatch):
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "llm-api-test.db")
-    return TestClient(main.app)
+    return api_client()
 
 
-def test_health_reports_generator_state(client, monkeypatch):
+def test_generator_endpoint_reports_generator_state(client, monkeypatch):
     monkeypatch.delenv("ADVISORLENS_LLM_PROVIDER", raising=False)
-    body = client.get("/health").json()
+    body = client.get("/generator").json()
     assert body["default_brief_generator"] == "deterministic-v1"
     assert body["llm_configured"] is False
     assert body["llm_model"] is None
 
     monkeypatch.setenv("ADVISORLENS_LLM_PROVIDER", "mock")
-    body = client.get("/health").json()
+    body = client.get("/generator").json()
     assert body["default_brief_generator"] == "deterministic-v1"  # still opt-in
     assert body["llm_configured"] is True
     assert body["llm_model"] == "mock-echo-1"

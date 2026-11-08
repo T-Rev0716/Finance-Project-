@@ -2,8 +2,11 @@
 import json
 from playwright.sync_api import expect
 
+from harness_api import SameSiteApi
+
 
 def verify_households(page, out):
+    api=SameSiteApi(page)
     page.set_viewport_size({'width':1440,'height':1000})
     page.goto('http://127.0.0.1:3100/households')
     page.get_by_role('button',name='Use fictional example',exact=True).click()
@@ -38,10 +41,10 @@ def verify_households(page, out):
     page.screenshot(path=str(out/'household-mobile.png'),full_page=True)
     assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth'), 'Household mobile overflow'
 
-    hid=page.request.get('http://127.0.0.1:8000/households').json()['households'][0]['id']
-    saved=page.request.get(f'http://127.0.0.1:8000/households/{hid}').json()
+    hid=api.get('/households').json()['households'][0]['id']
+    saved=api.get(f'/households/{hid}').json()
     saved['profile']['priorities']='Changed in another session.'
-    assert page.request.put(f'http://127.0.0.1:8000/households/{hid}',data={'profile':saved['profile'],'expected_version':3}).status==200
+    assert api.put(f'/households/{hid}',data={'profile':saved['profile'],'expected_version':3}).status==200
     page.get_by_label('Priorities and values',exact=True).fill('Keep this unsaved draft.')
     page.get_by_role('button',name='Save household',exact=True).click()
     expect(page.get_by_role('main').get_by_role('alert')).to_contain_text('updated elsewhere')
@@ -60,15 +63,15 @@ def verify_households(page, out):
     expect(confirm).to_contain_text('growth_concentrated.csv')
     confirm.get_by_role('button',name='Cancel',exact=True).click()
     expect(confirm).to_be_hidden()
-    assert page.request.get(f'http://127.0.0.1:8000/analyses/{page.request.get("http://127.0.0.1:8000/analyses").json()["analyses"][0]["id"]}/household').json()['context'] is None
+    assert api.get(f'/analyses/{api.get("/analyses").json()["analyses"][0]["id"]}/household').json()['context'] is None
     page.get_by_role('button',name='Attach snapshot',exact=True).click()
     confirm.scroll_into_view_if_needed()
     page.screenshot(path=str(out/'household-confirm.png'))
     confirm.get_by_role('button',name='Confirm permanent attachment',exact=True).click()
     expect(page.get_by_text('Browser test household · version 4',exact=True)).to_be_visible()
-    saved=page.request.get(f'http://127.0.0.1:8000/households/{hid}').json()
+    saved=api.get(f'/households/{hid}').json()
     saved['profile']['name']='Later household name'
-    assert page.request.put(f'http://127.0.0.1:8000/households/{hid}',data={'profile':saved['profile'],'expected_version':4}).status==200
+    assert api.put(f'/households/{hid}',data={'profile':saved['profile'],'expected_version':4}).status==200
     page.reload()
     page.get_by_role('button',name='history',exact=True).click()
     page.get_by_role('button',name='Open',exact=True).first.click()

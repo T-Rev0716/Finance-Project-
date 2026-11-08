@@ -5,18 +5,19 @@ from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
 from app import compliance, main
+from tests.conftest import api_client
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "api-test.db")
-    return TestClient(main.app)
+    return api_client()
 
 
 def test_health(client):
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    assert response.json() == {"status": "ok"}
 
 
 def test_list_samples(client):

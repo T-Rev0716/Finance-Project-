@@ -9,9 +9,10 @@ import json
 import re
 
 from playwright.sync_api import expect
+
+from harness_api import SameSiteApi
 from pypdf import PdfReader
 
-API = 'http://127.0.0.1:8000'
 INTERNAL_NOTE = 'INTERNAL-ONLY: client mentioned a possible inheritance.'
 CLIENT_TEXT = 'We will revisit position sizing at our next meeting.'
 
@@ -43,8 +44,9 @@ def _wait_until_held(page, pending):
 
 
 def verify_client_report(page, out):
+    api = SameSiteApi(page)
     page.set_viewport_size({'width': 1440, 'height': 1000})
-    aid = page.request.get(f'{API}/analyses').json()['analyses'][0]['id']
+    aid = api.get(f'/analyses').json()['analyses'][0]['id']
 
     # An internal decision note saved through the review queue.
     card = page.get_by_role('article').first
@@ -89,13 +91,13 @@ def verify_client_report(page, out):
     section.screenshot(path=str(out / 'report-preview.png'))
 
     # A review edited elsewhere after the preview must block approval.
-    item = page.request.get(f'{API}/analyses/{aid}/reviews').json()['items'][0]
-    assert page.request.put(f"{API}/analyses/{aid}/reviews/{item['finding_id']}", data={
+    item = api.get(f'/analyses/{aid}/reviews').json()['items'][0]
+    assert api.put(f"/analyses/{aid}/reviews/{item['finding_id']}", data={
         'status': 'discussed', 'note': INTERNAL_NOTE + ' (edited in another tab)',
         'expected_version': item['version']}).status == 200
     section.get_by_role('button', name='Approve and save report').click()
     expect(section.get_by_role('alert')).to_contain_text('changed')
-    assert page.request.get(f'{API}/analyses/{aid}/reports').json()['reports'] == []
+    assert api.get(f'/analyses/{aid}/reports').json()['reports'] == []
     section.screenshot(path=str(out / 'report-stale-blocked.png'))
     section.get_by_role('button', name='Reload latest sources').click()
     expect(section.get_by_role('status')).to_contain_text('Latest sources loaded')
@@ -116,7 +118,7 @@ def verify_client_report(page, out):
     expect(summary).to_be_enabled()
     section.screenshot(path=str(out / 'report-approved.png'))
 
-    record = page.request.get(f'{API}/reports/1').json()
+    record = api.get(f'/reports/1').json()
     downloads = {}
     for fmt, label in [('markdown', 'Markdown'), ('html', 'HTML'), ('pdf', 'PDF')]:
         with page.expect_download() as info:
@@ -134,13 +136,13 @@ def verify_client_report(page, out):
 
     # Later source edits must not change the approved downloads.
     hid = record['sources']['household']['household_id']
-    saved = page.request.get(f'{API}/households/{hid}').json()
+    saved = api.get(f'/households/{hid}').json()
     saved['profile']['priorities'] = 'Edited after the report was approved.'
-    assert page.request.put(f'{API}/households/{hid}', data={
+    assert api.put(f'/households/{hid}', data={
         'profile': saved['profile'], 'expected_version': saved['version']}).status == 200
-    assert page.request.post(f'{API}/analyses/{aid}/brief').status == 200
+    assert api.post(f'/analyses/{aid}/brief').status == 200
     for fmt in downloads:
-        assert page.request.get(f'{API}/reports/1/{fmt}').body() == downloads[fmt], f'{fmt} changed after edits'
+        assert api.get(f'/reports/1/{fmt}').body() == downloads[fmt], f'{fmt} changed after edits'
 
     page.set_viewport_size({'width': 390, 'height': 844})
     section.scroll_into_view_if_needed()
@@ -158,10 +160,11 @@ def verify_client_report(page, out):
 
 def _check_sources_refresh(page, out):
     """Prepare a report first, then change sources; the draft wording must survive."""
+    api = SameSiteApi(page)
     page.set_viewport_size({'width': 1440, 'height': 1000})
     page.get_by_role('button', name='margaret retiree tech heavy', exact=True).click()
     expect(page.get_by_role('heading', name='margaret_retiree_tech_heavy.csv')).to_be_visible()
-    aid = page.request.get(f'{API}/analyses').json()['analyses'][0]['id']
+    aid = api.get(f'/analyses').json()['analyses'][0]['id']
     section = page.get_by_role('region', name='Client report')
     section.get_by_role('button', name='Prepare client report').click()
     expect(section.get_by_text('No household snapshot is attached', exact=False)).to_be_visible()
@@ -172,8 +175,8 @@ def _check_sources_refresh(page, out):
     follow_up.fill('Follow-up written before refreshing.')
 
     # Ordinary refresh after a review changed elsewhere.
-    item = page.request.get(f'{API}/analyses/{aid}/reviews').json()['items'][0]
-    assert page.request.put(f"{API}/analyses/{aid}/reviews/{item['finding_id']}", data={
+    item = api.get(f'/analyses/{aid}/reviews').json()['items'][0]
+    assert api.put(f"/analyses/{aid}/reviews/{item['finding_id']}", data={
         'status': 'discussed', 'note': 'Changed in another tab.', 'expected_version': item['version']}).status == 200
     section.get_by_role('button', name='Refresh sources').click()
     expect(section.get_by_text('· Discussed', exact=False).first).to_be_visible()
@@ -181,7 +184,7 @@ def _check_sources_refresh(page, out):
     expect(follow_up).to_have_value('Follow-up written before refreshing.')
 
     # Attaching a household above the report makes it available, but not selected.
-    hid = page.request.get(f'{API}/households').json()['households'][0]['id']
+    hid = api.get(f'/households').json()['households'][0]['id']
     page.get_by_label('Saved household', exact=True).select_option(str(hid))
     page.get_by_role('button', name='Attach snapshot', exact=True).click()
     page.get_by_role('group', name='Confirm household attachment').get_by_role(

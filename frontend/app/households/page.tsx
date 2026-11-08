@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import SignOutButton from '@/components/SignOutButton';
 import { cloneElement, isValidElement, useCallback, useEffect, useId, useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { formatMoney } from '@/lib/api';
@@ -87,7 +88,7 @@ export default function HouseholdsPage() {
   return <div className="min-h-screen bg-slate-50 text-slate-900">
     <header className="border-b border-slate-200 bg-white"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-5">
       <Link href="/" onClick={e => { if (!canLeave()) e.preventDefault(); }} className="text-xl font-semibold tracking-tight">AdvisorLens<span className="ml-2 text-teal-700">/</span></Link>
-      <nav className="flex items-center gap-5 text-sm"><Link href="/workspace" onClick={e => { if (!canLeave()) e.preventDefault(); }} className="text-slate-600 hover:text-teal-800">Portfolio workspace</Link><span aria-current="page" className="font-semibold text-teal-800">Households</span></nav>
+      <nav className="flex items-center gap-5 text-sm"><Link href="/workspace" onClick={e => { if (!canLeave()) e.preventDefault(); }} className="text-slate-600 hover:text-teal-800">Portfolio workspace</Link><span aria-current="page" className="font-semibold text-teal-800">Households</span><SignOutButton /></nav>
     </div></header>
     <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
       <div className="mb-7"><p className="text-xs font-semibold uppercase tracking-[.18em] text-teal-700">Planning foundations</p><h1 className="mt-2 text-3xl font-semibold tracking-tight">Start with the household.</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">Bring goals, ownership and everyday cash flow into one conversation. Synthetic data only. Amounts are in USD.</p></div>

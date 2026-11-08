@@ -24,8 +24,12 @@ identifying anecdotes and photographed client values are not repository fixtures
    immutable stored exports, and confirmation before permanent household attachment.
    See [CLIENT-REPORTS.md](CLIENT-REPORTS.md).
 
-Next increment: a protected fictional-data demo (interface and API access control) before
-any deployment.
+5. Demo access protection: shared-password sign-in with sealed, expiring sessions,
+   server-side sign-out revocation, CSRF and origin checks, login throttling, an
+   allowlisted server-side proxy holding a backend secret, and a default-deny API.
+   Suitable for a small advisor demonstration with fictional data; see [DEPLOY.md](../DEPLOY.md).
+
+Next: deploy the protected demo from `main`, then run the practitioner validation below.
 
 ## Build next
 
@@ -51,8 +55,10 @@ any deployment.
 
 ## Required before real-client use
 
-Authentication and authorization on every data/report endpoint, advisor/firm isolation,
-privacy controls, production request limits, retention policy, and tested backup/restore.
+Individual advisor authentication and per-user authorization on every data/report endpoint
+(the current shared demo password is not this), advisor/firm isolation, privacy controls,
+production request limits, retention policy, and a restore drill on the deployed environment
+(backup/restore tooling exists and is tested automatically; see DEPLOY.md).
 An “owner” in a household means financial account ownership, not access authorization.
 No real client information belongs in this demo. Frameworks or banned-phrase checks do
 not establish regulatory compliance.

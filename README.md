@@ -99,36 +99,47 @@ cd backend && .venv/bin/python scripts/build_sample_brief.py
 
 ## Running it
 
-Backend (port 8000):
+The workspace is a password-protected, shared demo with fictional data (see
+[DEPLOY.md](DEPLOY.md) for the security model). Both services need explicit configuration;
+neither runs unprotected.
+
+1. Copy `backend/.env.example` → `backend/.env` and `frontend/.env.example` →
+   `frontend/.env.local`. Generate the backend and session secrets with
+   `python3 -c "import secrets; print(secrets.token_urlsafe(48))"` (two different values;
+   the backend secret goes in both files) and the password hash with
+   `cd backend && .venv/bin/python -m app.security hash-password`.
+
+2. Backend (port 8000):
+
+   ```bash
+   cd backend
+   python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+   set -a && . ./.env && set +a
+   .venv/bin/uvicorn app.main:app --reload --port 8000
+   ```
+
+3. Frontend (port 3000):
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+Open http://localhost:3000 for the landing page, or http://localhost:3000/workspace, which
+asks for the demo password first.
+
+The browser only calls the Next.js server; its authenticated `/api/*` routes forward an
+allowlisted set of routes to the API with a server-only secret. Calling the API directly
+needs that secret plus a session ID (any well-formed ID that has not been signed out):
 
 ```bash
-cd backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn app.main:app --reload --port 8000
-```
-
-Frontend (port 3000):
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open http://localhost:3000 for the landing page, or go straight to
-http://localhost:3000/workspace to pick a sample or upload a CSV.
-
-API without the frontend:
-
-```bash
-curl -X POST localhost:8000/analyze/sample/growth_concentrated.csv
-curl localhost:8000/analyses                       # saved analyses
-curl localhost:8000/analyses/1                     # full record incl. audit log
-curl localhost:8000/analyses/1/brief               # generate/view review brief (cached)
-curl -X POST localhost:8000/analyses/1/brief       # force regenerate
-curl localhost:8000/analyses/1/brief/markdown      # Markdown export (download)
-curl localhost:8000/analyses/1/brief/html          # printable HTML export
-curl localhost:8000/analyses/1/brief/pdf -o brief.pdf   # PDF export (download)
+H=(-H "x-advisorlens-backend-secret: $ADVISORLENS_BACKEND_SECRET" -H "x-advisorlens-session: local-cli-session-01")
+curl localhost:8000/health                                   # public: {"status":"ok"}
+curl "${H[@]}" -X POST localhost:8000/analyze/sample/growth_concentrated.csv
+curl "${H[@]}" localhost:8000/analyses                       # saved analyses
+curl "${H[@]}" localhost:8000/analyses/1/brief               # generate/view review brief (cached)
+curl "${H[@]}" localhost:8000/analyses/1/brief/pdf -o brief.pdf
 ```
 
 PDF export renders the same HTML template through headless Chromium (via Playwright),
