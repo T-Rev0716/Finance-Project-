@@ -3,7 +3,11 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { HouseholdContext as Context, HouseholdListItem, householdRequest } from '@/lib/households';
 
-export default function HouseholdContext({ analysisId, sourceName }: { analysisId: number; sourceName: string }) {
+export default function HouseholdContext({ analysisId, sourceName, onAttached }: {
+  analysisId: number;
+  sourceName: string;
+  onAttached?: () => void;
+}) {
   const [context, setContext] = useState<Context | null>(null);
   const [households, setHouseholds] = useState<HouseholdListItem[]>([]);
   const [selected, setSelected] = useState('');
@@ -37,6 +41,7 @@ export default function HouseholdContext({ analysisId, sourceName }: { analysisI
       });
       setContext(result.context);
       setConfirming(false);
+      onAttached?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to attach context.');
       setConfirming(false);

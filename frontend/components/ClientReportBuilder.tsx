@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ReviewStatus, getBrief } from "@/lib/api";
 import {
@@ -41,7 +41,14 @@ interface HouseholdChoice {
 }
 const NO_HOUSEHOLD: HouseholdChoice = { enabled: false, priorities: false, goals: false, accounts: false };
 
-export default function ClientReportBuilder({ analysisId }: { analysisId: number }) {
+export default function ClientReportBuilder({
+  analysisId,
+  sourcesToken,
+}: {
+  analysisId: number;
+  /** Incremented by the workspace when report sources change elsewhere (e.g. a household is attached). */
+  sourcesToken: number;
+}) {
   const [defaults, setDefaults] = useState<DraftDefaults | null>(null);
   const [summary, setSummary] = useState("");
   const [followUps, setFollowUps] = useState<Record<string, string>>({});
@@ -49,9 +56,13 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
   const [preview, setPreview] = useState<{ sha: string; html: string; draft: ReportDraft } | null>(null);
   const [reports, setReports] = useState<ApprovedReport[]>([]);
   const [busy, setBusy] = useState(false);
+  const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [message, setMessage] = useState("");
+  // Bumped on every draft or source change; a preview response is only accepted for the
+  // revision it was requested for, so a slow response can't revive an outdated draft.
+  const draftRevision = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -71,6 +82,7 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
   // Any edit after a preview invalidates it, so approval can only send what was shown.
   function edit<T>(setter: (value: T) => void) {
     return (value: T) => {
+      draftRevision.current += 1;
       setter(value);
       setPreview(null);
       setMessage("");
@@ -81,6 +93,7 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
   const editHousehold = edit(setHousehold);
 
   async function loadDefaults(keepDraft: boolean) {
+    draftRevision.current += 1;
     setBusy(true);
     setError(null);
     setStale(false);
@@ -100,7 +113,11 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
           defaults?.household?.household_id === next.household.household_id &&
           defaults?.household?.version === next.household.version;
         if (!sameSnapshot) setHousehold(NO_HOUSEHOLD);
-        setMessage("Latest sources loaded. Preview the report again before approving.");
+        setMessage(
+          next.household && !sameSnapshot
+            ? "Latest sources loaded. A household snapshot is now available; it stays excluded unless you select it."
+            : "Latest sources loaded. Preview the report again before approving.",
+        );
       } else {
         setSummary(next.client_summary);
         setFollowUps({});
@@ -140,15 +157,20 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
 
   async function runPreview() {
     if (!draft) return;
+    const revision = draftRevision.current;
     setBusy(true);
     setError(null);
     setStale(false);
     setMessage("");
     try {
       const result = await previewReport(analysisId, draft);
+      if (revision !== draftRevision.current) {
+        setMessage("The draft changed while the preview was loading. Preview again to review the current draft.");
+        return;
+      }
       setPreview({ sha: result.preview_sha256, html: result.html, draft });
     } catch (e) {
-      fail(e);
+      if (revision === draftRevision.current) fail(e);
     } finally {
       setBusy(false);
     }
@@ -157,6 +179,7 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
   async function approve() {
     if (!preview) return;
     setBusy(true);
+    setApproving(true);
     setError(null);
     try {
       const report = await approveReport(analysisId, preview.draft, preview.sha);
@@ -167,9 +190,17 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
       setPreview(null);
       fail(e);
     } finally {
+      setApproving(false);
       setBusy(false);
     }
   }
+
+  // Context attached elsewhere refreshes sources without discarding the advisor's wording.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: refresh on external trigger token
+    if (sourcesToken > 0 && defaults) loadDefaults(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourcesToken]);
 
   return (
     <section className="rounded-lg border bg-white p-5" aria-label="Client report">
@@ -186,7 +217,7 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
       )}
 
       {defaults && (
-        <div className="mt-5 space-y-6">
+        <fieldset disabled={approving} aria-label="Report draft" className="mt-5 min-w-0 space-y-6">
           <div>
             <label htmlFor={`report-summary-${analysisId}`} className="text-sm font-medium">
               Client-facing summary
@@ -309,11 +340,14 @@ export default function ClientReportBuilder({ analysisId }: { analysisId: number
             <button className={PRIMARY} disabled={busy || incomplete} onClick={runPreview}>
               {busy && !preview ? "Working…" : "Preview report"}
             </button>
+            <button className={SECONDARY} disabled={busy} onClick={() => loadDefaults(true)}>
+              Refresh sources
+            </button>
             {incomplete && (
               <span className="text-xs text-slate-500">Add a summary and client-facing text for each selected follow-up.</span>
             )}
           </div>
-        </div>
+        </fieldset>
       )}
 
       {error && (

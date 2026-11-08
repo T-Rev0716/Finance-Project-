@@ -174,6 +174,7 @@ function Results({
 }) {
   const { summary, flags } = result;
   const gain = summary.total_unrealized_gain_loss;
+  const [reportSourcesToken, setReportSourcesToken] = useState(0);
   return (
     <div className="space-y-6">
       <section className="rounded-lg border bg-white p-5">
@@ -211,6 +212,7 @@ function Results({
         key={`household-${result.analysis_id}`}
         analysisId={result.analysis_id}
         sourceName={result.source_name}
+        onAttached={() => setReportSourcesToken((token) => token + 1)}
       />
 
       <AdvisorReviewQueue key={result.analysis_id} analysisId={result.analysis_id} />
@@ -261,7 +263,11 @@ function Results({
         generatorInfo={generatorInfo}
       />
 
-      <ClientReportBuilder key={`report-${result.analysis_id}`} analysisId={result.analysis_id} />
+      <ClientReportBuilder
+        key={`report-${result.analysis_id}`}
+        analysisId={result.analysis_id}
+        sourcesToken={reportSourcesToken}
+      />
 
       <p className="rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-500">
         {result.disclaimer}

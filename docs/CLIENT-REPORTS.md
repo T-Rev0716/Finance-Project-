@@ -12,12 +12,18 @@ Open an analysis in the workspace, generate its review brief, then use **Client 
    snapshot permanently attached to the analysis.
 2. **Preview.** The server builds the report and returns its HTML plus a SHA-256 digest of
    the content and its source references (analysis, brief ID, review revisions, household
-   version). Any draft edit clears the preview.
+   version). Any draft edit clears the preview, and a preview response that arrives after
+   the draft changed is discarded (the form tracks a draft revision per request). The form is
+   locked while an approval is in flight.
 3. **Approve.** The server rebuilds the report from current records. If the digest differs
    (draft edited, newer brief, review revision changed, household snapshot mismatch), it
    returns 409 and nothing is saved; the advisor reloads sources and previews again.
    Otherwise it stores the content, sources, and rendered Markdown/HTML/PDF bytes.
-4. **Download.** `/reports/{id}/{format}` returns the stored bytes, so downloads are
+4. **Refresh.** *Refresh sources* reloads review revisions and household availability
+   without discarding the advisor's summary or follow-up text; attaching a household in
+   the workspace triggers the same refresh. Newly available household context stays
+   unselected until the advisor chooses it.
+5. **Download.** `/reports/{id}/{format}` returns the stored bytes, so downloads are
    byte-for-byte identical however sources change later.
 
 ## Guarantees and their enforcement
@@ -48,8 +54,10 @@ fails, nothing is approved.
 
 - No authentication or authorization; approval records no actor identity. Do not deploy
   this publicly until the protected-demo increment lands.
-- Review-item messages come from the existing engine and are phrased for the advisor
-  ("consider reviewing … with the client"). Engine wording is unchanged in this increment.
+- Review-item messages are currently reused verbatim from the engine and are phrased for the
+  advisor ("consider reviewing … with the client"). A report-specific presentation layer can
+  restate the same findings for clients without changing calculations or evidence; that is a
+  later polish task.
 - Household account inventory is not reconciled with imported holdings; the report says so
   rather than attempting reconciliation.
 - Approval holds the SQLite write lock while the PDF renders (about 1–2 s), serializing
