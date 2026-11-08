@@ -9,12 +9,13 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app import db, households, main
+from tests.conftest import api_client
 
 
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setattr(main, 'DB_PATH', tmp_path/'test.db')
-    return TestClient(main.app)
+    return api_client()
 
 
 @pytest.fixture

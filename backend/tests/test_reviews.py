@@ -7,14 +7,14 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import db, main, reviews
-from tests.conftest import make_csv
+from tests.conftest import api_client, make_csv
 
 
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
     path = tmp_path / 'review.db'
     monkeypatch.setattr(main, 'DB_PATH', path)
-    with TestClient(main.app) as client:
+    with api_client() as client:
         analysis = client.post('/analyze/sample/growth_concentrated.csv').json()
         aid = analysis['analysis_id']
         queue = client.get(f'/analyses/{aid}/reviews').json()

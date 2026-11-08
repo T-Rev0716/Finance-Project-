@@ -103,6 +103,24 @@ CREATE TABLE IF NOT EXISTS approved_report_files (
     sha256 TEXT NOT NULL,
     PRIMARY KEY (report_id, format)
 );
+CREATE TABLE IF NOT EXISTS login_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_key TEXT NOT NULL,
+    succeeded INTEGER NOT NULL CHECK(succeeded IN (0, 1)),
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_attempts_by_time ON login_attempts (created_at);
+CREATE TABLE IF NOT EXISTS revoked_sessions (
+    session_key TEXT PRIMARY KEY,
+    expires_at REAL NOT NULL,
+    revoked_at REAL NOT NULL
+);
+CREATE TABLE IF NOT EXISTS session_epoch (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    not_before REAL NOT NULL,
+    reason TEXT NOT NULL,
+    set_at REAL NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS approved_reports_no_update BEFORE UPDATE ON approved_reports
 BEGIN SELECT RAISE(ABORT, 'Approved reports are immutable.'); END;
 CREATE TRIGGER IF NOT EXISTS approved_reports_no_delete BEFORE DELETE ON approved_reports

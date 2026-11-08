@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from pypdf import PdfReader
 
 from app import db, main
+from tests.conftest import api_client
 
 SAMPLE = "margaret_retiree_tech_heavy.csv"
 CLIENT_TEXT = "We agreed to revisit position sizing at the next meeting."
@@ -46,7 +47,7 @@ def _exports(client, report_id) -> dict:
 def env(tmp_path, monkeypatch):
     path = tmp_path / "reports.db"
     monkeypatch.setattr(main, "DB_PATH", path)
-    client = TestClient(main.app)
+    client = api_client()
     aid = client.post(f"/analyze/sample/{SAMPLE}").json()["analysis_id"]
     assert client.get(f"/analyses/{aid}/brief").status_code == 200
     items = client.get(f"/analyses/{aid}/reviews").json()["items"]

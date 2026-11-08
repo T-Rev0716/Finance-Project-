@@ -8,6 +8,7 @@ import AdvisorReviewQueue from "@/components/AdvisorReviewQueue";
 import BriefView from "@/components/BriefView";
 import ClientReportBuilder from "@/components/ClientReportBuilder";
 import HistoryView from "@/components/HistoryView";
+import SignOutButton from "@/components/SignOutButton";
 import {
   AllocationItem,
   AnalysisResult,
@@ -79,6 +80,7 @@ export default function Workspace() {
             </p>
           </div>
           <Link href="/households" className="text-sm font-medium text-teal-800 hover:underline">Households</Link>
+          <SignOutButton />
           <nav className="flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
             {(["analyze", "history"] as const).map((name) => (
               <button

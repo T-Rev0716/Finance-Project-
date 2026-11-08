@@ -1,17 +1,18 @@
-"""AdvisorLens API — Phase 1.
+"""AdvisorLens API.
 
-Synthetic-data portfolio analysis only: no brokerage links, no market data
-APIs, no authentication. Results and audit records are stored in SQLite.
+Synthetic-data portfolio analysis only: no brokerage links and no market data
+APIs. Results and audit records are stored in SQLite. Every route except the
+minimal /health check is protected by the shared-demo access control in
+security.py; browsers reach the API only through the Next.js server.
 """
 
 import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
-from . import ENGINE_VERSION, db, reviews, households, reports
+from . import ENGINE_VERSION, db, reviews, households, reports, security
 from .brief import GENERATORS, brief_to_html, brief_to_markdown, generate_brief, resolve_generator
 from .ingestion import IngestionError
 from .llm import LLMConfig
@@ -24,28 +25,31 @@ DB_PATH = Path(os.environ.get("ADVISORLENS_DB", db.DEFAULT_DB_PATH))
 
 MAX_UPLOAD_BYTES = 1_000_000  # synthetic CSVs are tiny; reject anything larger
 
-app = FastAPI(title="AdvisorLens API", version=ENGINE_VERSION)
+# Raises (preventing startup) when production access protection is missing or invalid.
+_ENVIRONMENT = security.startup_check()
+_DOCS = _ENVIRONMENT == "development"
 
-# Deployed frontend origins (e.g. a Vercel URL) go in ADVISORLENS_CORS_ORIGINS as a
-# comma-separated list; localhost stays allowed so local dev keeps working.
-_extra_origins = [
-    origin.strip()
-    for origin in os.environ.get("ADVISORLENS_CORS_ORIGINS", "").split(",")
-    if origin.strip()
-]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", *_extra_origins],
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = FastAPI(
+    title="AdvisorLens API",
+    version=ENGINE_VERSION,
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
 )
+# No CORS middleware: browsers never call this API directly, and CORS is not authentication.
+app.add_middleware(security.AccessControlMiddleware, db_path_provider=lambda: DB_PATH)
 
 
 @app.get("/health")
 def health() -> dict:
+    """Public liveness check; deliberately reveals nothing about configuration."""
+    return {"status": "ok"}
+
+
+@app.get("/generator")
+def generator_info() -> dict:
     llm_config = LLMConfig.from_env()
     return {
-        "status": "ok",
         "engine_version": ENGINE_VERSION,
         "default_brief_generator": resolve_generator(),
         "llm_configured": llm_config.is_configured,
@@ -193,3 +197,4 @@ def save_finding_review(analysis_id: int, finding_id: str, update: reviews.Revie
 
 app.include_router(households.router(lambda: DB_PATH))
 app.include_router(reports.router(lambda: DB_PATH))
+app.include_router(security.router(lambda: DB_PATH))

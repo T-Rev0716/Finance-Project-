@@ -1,4 +1,4 @@
-import { API_BASE } from './api';
+import { apiFetch } from './api';
 
 export type Evidence = 'estimated' | 'confirmed';
 export interface Member { id: string; name: string; retirement_date: string | null }
@@ -20,7 +20,7 @@ export interface HouseholdVersion { version: number; created_at: string; profile
 export interface HouseholdContext { household_id: number; version: number; linked_at: string; profile: Profile }
 export class HouseholdError extends Error { constructor(message: string, public status: number) { super(message); } }
 export async function householdRequest<T>(path: string, method = 'GET', payload?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, { method, cache: 'no-store',
+  const response = await apiFetch(path, { method,
     headers: { 'Content-Type': 'application/json' }, body: payload === undefined ? undefined : JSON.stringify(payload) });
   const data = await response.json();
   if (!response.ok) {

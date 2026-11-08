@@ -5,7 +5,7 @@ from app import main
 from app.analytics import build_summary
 from app.ingestion import IngestionError, load_portfolio
 from app.rules import rule_single_holding_concentration
-from tests.conftest import make_csv
+from tests.conftest import api_client, make_csv
 
 @pytest.mark.parametrize('column', ['shares', 'market_value', 'cost_basis'])
 @pytest.mark.parametrize('value', ['inf', '-inf', 'NaN'])
@@ -45,7 +45,7 @@ def test_same_security_aggregates_despite_name_and_case():
 
 def test_infinite_upload_returns_validation_error_without_saving(tmp_path, monkeypatch):
     monkeypatch.setattr(main, 'DB_PATH', tmp_path / 'test.db')
-    with TestClient(main.app) as client:
+    with api_client() as client:
         response = client.post('/analyze/upload', files={'file': ('bad.csv', make_csv([
             'AAPL,Apple,Equity,Technology,10,inf,100,Taxable,Moderate,Growth'
         ]).encode(), 'text/csv')})

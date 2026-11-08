@@ -1,4 +1,4 @@
-import { API_BASE, Flag, ReviewStatus } from "./api";
+import { API_BASE, apiFetch, Flag, ReviewStatus } from "./api";
 
 export type ReportFormat = "markdown" | "html" | "pdf";
 
@@ -60,9 +60,8 @@ export class ReportError extends Error {
 }
 
 async function request<T>(path: string, method = "GET", payload?: unknown): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const response = await apiFetch(path, {
     method,
-    cache: "no-store",
     headers: { "Content-Type": "application/json" },
     body: payload === undefined ? undefined : JSON.stringify(payload),
   });
