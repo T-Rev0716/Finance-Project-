@@ -55,6 +55,16 @@ def verify_households(page, out):
     page.get_by_role('button',name='growth concentrated',exact=True).click()
     page.get_by_label('Saved household',exact=True).select_option(str(hid))
     page.get_by_role('button',name='Attach snapshot',exact=True).click()
+    confirm=page.get_by_role('group',name='Confirm household attachment')
+    expect(confirm).to_contain_text('Browser test household')
+    expect(confirm).to_contain_text('growth_concentrated.csv')
+    confirm.get_by_role('button',name='Cancel',exact=True).click()
+    expect(confirm).to_be_hidden()
+    assert page.request.get(f'http://127.0.0.1:8000/analyses/{page.request.get("http://127.0.0.1:8000/analyses").json()["analyses"][0]["id"]}/household').json()['context'] is None
+    page.get_by_role('button',name='Attach snapshot',exact=True).click()
+    confirm.scroll_into_view_if_needed()
+    page.screenshot(path=str(out/'household-confirm.png'))
+    confirm.get_by_role('button',name='Confirm permanent attachment',exact=True).click()
     expect(page.get_by_text('Browser test household · version 4',exact=True)).to_be_visible()
     saved=page.request.get(f'http://127.0.0.1:8000/households/{hid}').json()
     saved['profile']['name']='Later household name'
@@ -67,4 +77,5 @@ def verify_households(page, out):
     page.screenshot(path=str(out/'household-attached.png'))
     (out/'household-result.json').write_text(json.dumps({'status':'passed','checks':[
         'create','reload','unknown-versus-zero','irregular-expense-conversion','inventory-confirmation',
-        'history','stale-update-conflict','mobile-overflow','analysis-snapshot-remains-frozen']}))
+        'history','stale-update-conflict','mobile-overflow','attach-requires-confirmation',
+        'analysis-snapshot-remains-frozen']}))

@@ -1,5 +1,10 @@
 # Deploying AdvisorLens
 
+> **Do not deploy publicly yet.** The API has no authentication: anyone who finds the
+> backend URL can read every analysis, internal review note, household profile and approved
+> report. Interface and API access protection is the next planned increment
+> (see [docs/ROADMAP.md](docs/ROADMAP.md)); the steps below assume it is in place.
+
 Two services, deployed separately, wired together by two environment variables:
 
 - **Backend** (FastAPI + SQLite) → [Railway](https://railway.app), via the

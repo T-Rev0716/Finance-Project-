@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import AdvisorReviewQueue from "@/components/AdvisorReviewQueue";
 import BriefView from "@/components/BriefView";
+import ClientReportBuilder from "@/components/ClientReportBuilder";
 import HistoryView from "@/components/HistoryView";
 import {
   AllocationItem,
@@ -206,7 +207,11 @@ function Results({
         </div>
       </section>
 
-      <HouseholdContext key={`household-${result.analysis_id}`} analysisId={result.analysis_id} />
+      <HouseholdContext
+        key={`household-${result.analysis_id}`}
+        analysisId={result.analysis_id}
+        sourceName={result.source_name}
+      />
 
       <AdvisorReviewQueue key={result.analysis_id} analysisId={result.analysis_id} />
 
@@ -255,6 +260,8 @@ function Results({
         autoLoadToken={autoLoadBriefToken}
         generatorInfo={generatorInfo}
       />
+
+      <ClientReportBuilder key={`report-${result.analysis_id}`} analysisId={result.analysis_id} />
 
       <p className="rounded-md border border-slate-200 bg-white p-4 text-xs text-slate-500">
         {result.disclaimer}
