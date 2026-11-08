@@ -141,18 +141,39 @@ any failure the command exits non-zero and the destination is unchanged.
 # Back up (from a Railway shell: `railway ssh`, or Settings → Shell):
 python /app/backend/scripts/backup_db.py backup --db /data/advisorlens.db \
   --out /data/backups/advisorlens-$(date +%Y%m%d-%H%M%S).db
-# Copy it off the volume as well, e.g. `railway ssh -- cat <file> > local.db`.
+# Copy it off the volume as well (paths are relative to the volume root; get the volume
+# ID from `railway volume list --json`), then compare `sha256sum` with the copy on the volume:
+railway volume files --volume <volume-id> download /backups/<file>.db ./<file>.db
 
 # Check any copy:
 python /app/backend/scripts/backup_db.py verify --db /data/backups/<file>.db
+```
 
-# Restore: stop traffic first (Railway: remove the domain or scale the service to 0
-# replicas from a one-off shell), then, on the API's own host:
+Restore with the API's writes stopped and nothing holding the database open. Never swap the
+file under a running API: a connection that still has it open would keep reading and writing
+the replaced file.
+
+```bash
+# 1. Stop traffic but keep the hostname that Vercel's ADVISORLENS_BACKEND_URL points at.
+#    Note the domain's id and current targetPort, then route it to a port nothing listens on:
+railway domain list --service <service> --json
+railway domain update <domain-id> --port 9 --service <service>
+curl -s -o /dev/null -w '%{http_code}\n' https://<name>.up.railway.app/health   # 502
+
+# 2. On the API's own host (`railway ssh`), confirm nothing holds the database open:
+ls -l /proc/[0-9]*/fd 2>/dev/null | grep advisorlens.db || echo "database not in use"
+#    If a process still holds it, freeze that process (`kill -STOP <pid>`) instead of
+#    killing it: the restart in step 3 replaces it. Then restore:
 python /app/backend/scripts/backup_db.py restore --db /data/advisorlens.db \
   --from /data/backups/<file>.db
-# The current file is kept as advisorlens.db.pre-restore-<timestamp>. Restart the service,
-# sign in again and confirm the analyses list in the workspace.
+
+# 3. Restart the API so it starts against the restored file, then restore traffic:
+railway restart --service <service> --yes
+railway domain update <domain-id> --port <original-targetPort> --service <service>
 ```
+
+The previous file is kept as `advisorlens.db.pre-restore-<timestamp>`. Sign in again and
+confirm the analyses list in the workspace.
 
 A restore records the restore time in the restored database, and the API then rejects
 every session issued before it. Run the restore on the API host, whose clock sets that

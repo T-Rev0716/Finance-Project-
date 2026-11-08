@@ -9,6 +9,7 @@ Two tables:
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -158,7 +159,7 @@ def save_analysis(
     flags: list[dict],
     warnings: list[str],
 ) -> int:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         cur = conn.execute(
             """
             INSERT INTO analyses (
@@ -203,7 +204,7 @@ def save_analysis(
 
 
 def log_event(db_path: Path | str, analysis_id: int | None, event: str, detail: dict) -> None:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         conn.execute(
             "INSERT INTO audit_log (analysis_id, event, detail_json, created_at) VALUES (?, ?, ?, ?)",
             (analysis_id, event, json.dumps(detail), _now()),
@@ -211,7 +212,7 @@ def log_event(db_path: Path | str, analysis_id: int | None, event: str, detail: 
 
 
 def save_brief(db_path: Path | str, analysis_id: int, brief: dict) -> int:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         cur = conn.execute(
             """
             INSERT INTO briefs (analysis_id, created_at, generator, engine_version, brief_json)
@@ -247,7 +248,7 @@ def save_brief(db_path: Path | str, analysis_id: int, brief: dict) -> int:
 
 
 def get_latest_brief(db_path: Path | str, analysis_id: int) -> dict | None:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         row = conn.execute(
             "SELECT brief_json FROM briefs WHERE analysis_id = ? ORDER BY id DESC LIMIT 1",
             (analysis_id,),
@@ -257,7 +258,7 @@ def get_latest_brief(db_path: Path | str, analysis_id: int) -> dict | None:
 
 def get_latest_brief_record(db_path: Path | str, analysis_id: int) -> tuple[int, dict] | None:
     """Latest brief with its row id, so a report can cite the exact brief it used."""
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         row = conn.execute(
             "SELECT id, brief_json FROM briefs WHERE analysis_id = ? ORDER BY id DESC LIMIT 1",
             (analysis_id,),
@@ -266,7 +267,7 @@ def get_latest_brief_record(db_path: Path | str, analysis_id: int) -> tuple[int,
 
 
 def list_analyses(db_path: Path | str, limit: int = 20) -> list[dict]:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         rows = conn.execute(
             """
             SELECT a.id, a.created_at, a.source_name, a.file_sha256, a.engine_version,
@@ -280,7 +281,7 @@ def list_analyses(db_path: Path | str, limit: int = 20) -> list[dict]:
 
 
 def get_analysis(db_path: Path | str, analysis_id: int) -> dict | None:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn, conn:
         row = conn.execute("SELECT * FROM analyses WHERE id = ?", (analysis_id,)).fetchone()
         if row is None:
             return None
