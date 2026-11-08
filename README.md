@@ -267,7 +267,8 @@ keeps the draft and offers an explicit discard-and-reload action. Reopening a re
 item preserves its earlier decisions. Existing databases gain the new tables without
 rewriting stored analyses.
 
-Internal notes are deliberately excluded from AI prompts and client brief exports.
+Internal notes are deliberately excluded from AI prompts and brief exports, and reach an
+approved client report only if the advisor explicitly copies them into client-facing text.
 The original deterministic evidence remains unchanged when an item is resolved.
 This remains a local synthetic-data demo without user authentication; analysis separation
 is not a substitute for per-user authorization or a household data model.
@@ -295,8 +296,21 @@ The GitHub verification workflow runs these checks and uploads browser evidence.
 Open **Households** from the workspace, then **Use fictional example** to explore
 members, goals, ownership, valuation dates, and monthly/annual cash flow. A completed
 cash-flow inventory is required before a surplus or shortfall is shown. Save a profile,
-then attach its fixed version to a portfolio analysis for internal meeting context.
-Household data stays out of AI prompts and client reports. Use fictional information only.
+then attach its fixed version to a portfolio analysis for internal meeting context
+(the workspace asks for confirmation first, because the attachment is permanent).
+Household data stays out of AI prompts, and reaches a client report only when the advisor
+selects it. Use fictional information only.
 
 Details: [Household workflow](docs/HOUSEHOLDS.md).
+
+### Approved client reports
+
+From an analysis, **Client report** lets the advisor write a client-facing summary, choose
+follow-ups (with separate client-facing text) and household context, preview the exact
+report, and approve it. Approval is refused if any cited source changed after the preview.
+Approved reports and their Markdown/HTML/PDF files are stored and cannot be modified, so later
+edits never change an earlier report. Each report states that it covers only the analyzed CSV
+and labels any household account inventory as advisor-entered and unreconciled.
+
+Details: [Approved client reports](docs/CLIENT-REPORTS.md).
 The [revised build roadmap](docs/ROADMAP.md) supersedes the feature order in the original review.

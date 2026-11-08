@@ -34,7 +34,7 @@ export default function AdvisorReviewQueue({ analysisId }: { analysisId: number 
         {items.filter(i => i.status === "resolved").length} of {items.length} resolved
       </span>}
     </div>
-    <p className="mt-2 text-xs text-slate-500">Internal demo notes stay with this analysis. They are not sent to AI or included in client brief exports.</p>
+    <p className="mt-2 text-xs text-slate-500">Internal demo notes stay with this analysis. They are not sent to AI, and a client report only includes text you write or explicitly copy into it.</p>
     {error && <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error} <button className={`${CONTROL} ml-2`} onClick={() => setAttempt(a => a + 1)}>Retry loading reviews</button></div>}
     {!items && !error && <p role="status" className="mt-4 text-sm text-slate-500">Loading review decisions…</p>}
     {items && <>

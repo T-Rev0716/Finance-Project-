@@ -85,6 +85,32 @@ CREATE TABLE IF NOT EXISTS briefs (
     engine_version TEXT NOT NULL,
     brief_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS approved_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    analysis_id INTEGER NOT NULL REFERENCES analyses(id),
+    brief_id INTEGER NOT NULL REFERENCES briefs(id),
+    household_id INTEGER,
+    household_version INTEGER,
+    content_json TEXT NOT NULL,
+    sources_json TEXT NOT NULL,
+    content_sha256 TEXT NOT NULL,
+    approved_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS approved_report_files (
+    report_id INTEGER NOT NULL REFERENCES approved_reports(id),
+    format TEXT NOT NULL CHECK(format IN ('markdown', 'html', 'pdf')),
+    body BLOB NOT NULL,
+    sha256 TEXT NOT NULL,
+    PRIMARY KEY (report_id, format)
+);
+CREATE TRIGGER IF NOT EXISTS approved_reports_no_update BEFORE UPDATE ON approved_reports
+BEGIN SELECT RAISE(ABORT, 'Approved reports are immutable.'); END;
+CREATE TRIGGER IF NOT EXISTS approved_reports_no_delete BEFORE DELETE ON approved_reports
+BEGIN SELECT RAISE(ABORT, 'Approved reports are immutable.'); END;
+CREATE TRIGGER IF NOT EXISTS approved_report_files_no_update BEFORE UPDATE ON approved_report_files
+BEGIN SELECT RAISE(ABORT, 'Approved report files are immutable.'); END;
+CREATE TRIGGER IF NOT EXISTS approved_report_files_no_delete BEFORE DELETE ON approved_report_files
+BEGIN SELECT RAISE(ABORT, 'Approved report files are immutable.'); END;
 """
 
 
@@ -209,6 +235,16 @@ def get_latest_brief(db_path: Path | str, analysis_id: int) -> dict | None:
             (analysis_id,),
         ).fetchone()
     return json.loads(row["brief_json"]) if row else None
+
+
+def get_latest_brief_record(db_path: Path | str, analysis_id: int) -> tuple[int, dict] | None:
+    """Latest brief with its row id, so a report can cite the exact brief it used."""
+    with _connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT id, brief_json FROM briefs WHERE analysis_id = ? ORDER BY id DESC LIMIT 1",
+            (analysis_id,),
+        ).fetchone()
+    return (int(row["id"]), json.loads(row["brief_json"])) if row else None
 
 
 def list_analyses(db_path: Path | str, limit: int = 20) -> list[dict]:

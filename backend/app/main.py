@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse, Response
 
-from . import ENGINE_VERSION, db, reviews, households
+from . import ENGINE_VERSION, db, reviews, households, reports
 from .brief import GENERATORS, brief_to_html, brief_to_markdown, generate_brief, resolve_generator
 from .ingestion import IngestionError
 from .llm import LLMConfig
@@ -192,3 +192,4 @@ def save_finding_review(analysis_id: int, finding_id: str, update: reviews.Revie
 
 
 app.include_router(households.router(lambda: DB_PATH))
+app.include_router(reports.router(lambda: DB_PATH))

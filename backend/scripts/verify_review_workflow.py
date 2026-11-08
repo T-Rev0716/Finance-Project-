@@ -13,6 +13,7 @@ import time
 from urllib.request import urlopen
 
 from playwright.sync_api import sync_playwright, expect
+from verify_client_report import verify_client_report
 from verify_households import verify_households
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -91,13 +92,14 @@ with tempfile.TemporaryDirectory() as temporary:
             pdf = page.request.get(f'http://127.0.0.1:8000/analyses/{aid}/brief/pdf')
             assert pdf.status == 200 and pdf.body().startswith(b'%PDF')
             (OUT/'result.json').write_text(json.dumps({'status':'passed','checks':['save','reload','resolve-note-required','history','stale-update-conflict','mobile-overflow','no-page-errors','pdf-export']}))
-            try:
-                verify_households(page, OUT)
-            except Exception:
-                page.screenshot(path=str(OUT/'household-failure.png'), full_page=True)
-                (OUT/'household-failure.html').write_text(page.content())
-                (OUT/'page-errors.json').write_text(json.dumps(errors))
-                raise
+            for name, check in [('household', verify_households), ('report', verify_client_report)]:
+                try:
+                    check(page, OUT)
+                except Exception:
+                    page.screenshot(path=str(OUT/f'{name}-failure.png'), full_page=True)
+                    (OUT/f'{name}-failure.html').write_text(page.content())
+                    (OUT/'page-errors.json').write_text(json.dumps(errors))
+                    raise
             assert not errors, errors
             browser.close()
     finally:

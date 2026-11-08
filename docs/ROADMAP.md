@@ -16,9 +16,16 @@ identifying anecdotes and photographed client values are not repository fixtures
 
 1. Portfolio data integrity: normalized exposure, input validation, immutable analyses.
 2. Advisor review queue: saved statuses, internal notes, decision history, concurrency protection.
-3. Household foundation (this increment): members, goals, manual account inventory with
+3. Household foundation: members, goals, manual account inventory with
    ownership/dates, current cash flow, explicit unknowns and estimates, version history,
    and frozen household context attached to an analysis. No changes to existing engine rules.
+4. Approved client reports: explicit selection of follow-ups and household context,
+   separate client-facing text, exact preview and approval with source-version checks,
+   immutable stored exports, and confirmation before permanent household attachment.
+   See [CLIENT-REPORTS.md](CLIENT-REPORTS.md).
+
+Next increment: a protected fictional-data demo (interface and API access control) before
+any deployment.
 
 ## Build next
 
