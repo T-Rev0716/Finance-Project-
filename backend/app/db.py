@@ -57,6 +57,26 @@ CREATE TABLE IF NOT EXISTS review_events (
     created_at TEXT NOT NULL,
     UNIQUE (analysis_id, finding_id, version)
 );
+CREATE TABLE IF NOT EXISTS households (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version INTEGER NOT NULL,
+    profile_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS household_versions (
+    household_id INTEGER NOT NULL REFERENCES households(id),
+    version INTEGER NOT NULL,
+    profile_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (household_id, version)
+);
+CREATE TABLE IF NOT EXISTS analysis_households (
+    analysis_id INTEGER PRIMARY KEY REFERENCES analyses(id),
+    household_id INTEGER NOT NULL,
+    version INTEGER NOT NULL,
+    linked_at TEXT NOT NULL,
+    FOREIGN KEY (household_id, version) REFERENCES household_versions(household_id, version)
+);
 CREATE TABLE IF NOT EXISTS briefs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     analysis_id INTEGER NOT NULL REFERENCES analyses(id),

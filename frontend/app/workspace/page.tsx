@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import HouseholdContext from "@/components/HouseholdContext";
 import { useEffect, useState } from "react";
 
 import AdvisorReviewQueue from "@/components/AdvisorReviewQueue";
@@ -76,6 +77,7 @@ export default function Workspace() {
               only.
             </p>
           </div>
+          <Link href="/households" className="text-sm font-medium text-teal-800 hover:underline">Households</Link>
           <nav className="flex gap-1 rounded-lg border border-slate-200 bg-slate-100 p-1">
             {(["analyze", "history"] as const).map((name) => (
               <button
@@ -203,6 +205,8 @@ function Results({
           <Stat label="Review items" value={String(flags.length)} />
         </div>
       </section>
+
+      <HouseholdContext key={`household-${result.analysis_id}`} analysisId={result.analysis_id} />
 
       <AdvisorReviewQueue key={result.analysis_id} analysisId={result.analysis_id} />
 

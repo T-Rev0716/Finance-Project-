@@ -22,6 +22,15 @@ jobs:
       - run: python -m pytest backend/tests -q
       - run: npm ci --ignore-scripts
         working-directory: frontend
+      - name: Capture dependency advisory report
+        continue-on-error: true
+        working-directory: frontend
+        run: |
+          mkdir -p ../browser-evidence
+          npm audit --json --fetch-retries=0 --fetch-timeout=15000 > ../browser-evidence/dependency-audit.json
+      - name: Check production dependency advisories
+        working-directory: frontend
+        run: npm audit --omit=dev --json --fetch-retries=0 --fetch-timeout=15000 > ../browser-evidence/runtime-dependency-audit.json
       - run: npm run lint && npm run build
         working-directory: frontend
       - run: python backend/scripts/verify_review_workflow.py browser-evidence
