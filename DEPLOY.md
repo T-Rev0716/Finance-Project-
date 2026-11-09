@@ -66,8 +66,10 @@ either way.
 ## 1. Backend (Railway)
 
 1. New Project → **Deploy from GitHub repo** → this repo. In the service's **Settings →
-   Source**, set the branch to `main`. `railway.json` builds `backend/Dockerfile`
-   (build context is the repo root; do not set a Root Directory override).
+   Source**, set the branch to `main`. The service builds `backend/Dockerfile` with the
+   repo root as build context (do not set a Root Directory override), health-checks
+   `/health` and restarts on failure. These settings live in `.railway/railway.ts`; see
+   [Railway build settings](#railway-build-settings) for how they reach the service.
 2. **Volume:** Settings → Volumes → New Volume, mount path `/data`.
 3. **Variables:**
 
@@ -89,6 +91,66 @@ either way.
 
    If the deploy fails to start, read the log: the API names the missing or invalid
    security variable rather than starting unprotected.
+
+### Railway build settings
+
+`.railway/railway.ts` (Railway Infrastructure as Code) holds the service's build and
+deploy settings:
+
+| Setting | Value |
+|---|---|
+| Builder | Dockerfile, `backend/Dockerfile` |
+| Build context | repo root (no `rootDirectory`) |
+| Healthcheck | `/health`, timeout 100 s |
+| Restart policy | `ON_FAILURE` |
+
+It also refers to the existing `/data` volume so that applying it keeps the volume
+attached. It does not manage variables (`variables: { managed: false }`), domains or
+replicas.
+
+Railway does **not** read `.railway/` during deploys: the file changes the service only
+when you run `railway config apply`. Until that has been done, the repo-root
+`railway.json` (deprecated Config as Code) supplies these settings at every deploy, and
+Railway stops reading it on **2026-12-01**. A service that has not received the settings
+by then falls back to Railpack with no healthcheck, which does not build this repo.
+
+**One-time switch, before 2026-12-01.** `apply` changes the live service and may start a
+deployment; merging the `railway.json` removal deploys. You need Railway CLI 5.42.1 or
+newer, Node 22 or newer, and `railway status` showing project `advisorlens-demo`,
+environment `production`, service `advisorlens-api`.
+
+```bash
+npm ci --prefix .railway          # installs the pinned railway/iac SDK
+railway config migrate status     # must not list advisorlens-api as reading Config as Code
+railway config plan
+```
+
+The plan must show exactly these five changes on `advisorlens-api`, with nothing
+destructive: `build.builder → "DOCKERFILE"`, `build.dockerfilePath → "backend/Dockerfile"`,
+`deploy.healthcheckPath → "/health"`, `deploy.healthcheckTimeout → 100`,
+`deploy.restartPolicyType → "ON_FAILURE"`. Stop if it shows anything else, in particular
+a `volumeAttachments` change (that detaches `/data`, the database) or a variable delete.
+If the volume has been resized, update `sizeMB` in `railway.ts` first.
+
+```bash
+railway config apply
+railway config plan               # should now report no changes
+```
+
+Then remove `railway.json` in its own PR. After that merge deploys, check that the build
+log shows `load build definition from backend/Dockerfile` and no Config as Code warning,
+and that `/health` returns `{"status":"ok"}`.
+
+If `migrate status` does list the service (a custom config-file path in its Settings), run
+`railway config migrate cutover --service advisorlens-api` before planning;
+`railway config migrate undo` reverses it from the snapshot it saves in
+`.railway/.cac-migration.json`.
+
+On Windows, `railway/iac` checks the CLI version by running `$_ --version`. If
+`railway config plan` says it "requires Railway CLI 5.42.1 or newer" although
+`railway --version` is newer, the `railway` on your PATH is a wrapper script: run the
+`railway.exe` binary directly (Git Bash), or first set `$env:_` to that binary's full
+path (PowerShell).
 
 ## 2. Frontend (Vercel)
 

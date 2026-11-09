@@ -1,0 +1,9 @@
+{
+  "name": "advisorlens-railway-iac",
+  "private": true,
+  "description": "Railway Infrastructure as Code tooling for the AdvisorLens backend (railway.ts). Not part of any app build.",
+  "type": "module",
+  "devDependencies": {
+    "railway": "3.16.0"
+  }
+}

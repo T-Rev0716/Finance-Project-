@@ -12,6 +12,7 @@ frontend/node_modules/
 frontend/.next/
 frontend/out/
 frontend/next-env.d.ts
+.railway/node_modules/
 
 # Env files (LLM credentials live in the shell or local env files, never in git)
 .env
