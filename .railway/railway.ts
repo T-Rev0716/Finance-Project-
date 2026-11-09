@@ -15,7 +15,9 @@ import { defineRailway, github, project, service, volume } from "railway/iac";
 export const partial = "advisorlens-api";
 export default defineRailway(() => {
   const advisorlensApi = service("advisorlens-api", {
-    source: github("T-Rev0716/Finance-Project-"),
+    // Explicit: the SDK only defaults to "main", and this repo's GitHub default
+    // branch is not main. Production deploys from main.
+    source: github("T-Rev0716/Finance-Project-", { branch: "main" }),
     build: { builder: "DOCKERFILE", dockerfilePath: "backend/Dockerfile" },
     healthcheck: "/health",
     healthcheckTimeout: 100,
