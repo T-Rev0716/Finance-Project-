@@ -1,3 +1,7 @@
+import sqlite3
+
+import pytest
+
 from app import db
 from app.brief import generate_brief
 from app.service import analyze_csv
@@ -55,3 +59,32 @@ def test_list_analyses_reports_brief_status(tmp_path, simple_csv):
     rows = {r["source_name"]: r for r in db.list_analyses(db_path)}
     assert rows["first.csv"]["has_brief"] is True
     assert rows["second.csv"]["has_brief"] is False
+
+
+def test_every_connection_is_closed_after_use(tmp_path, simple_csv, monkeypatch):
+    # `with conn:` only commits or rolls back. An unclosed connection keeps the database
+    # file open until garbage collection, so an idle API would still hold the file a
+    # restore swaps out (see DEPLOY.md, Backups and restore).
+    opened = []
+    real_connect = db._connect
+
+    def tracking_connect(path):
+        conn = real_connect(path)
+        opened.append(conn)  # Keeps it alive: only an explicit close() can pass below.
+        return conn
+
+    monkeypatch.setattr(db, "_connect", tracking_connect)
+    db_path = tmp_path / "test.db"
+    analysis_id = analyze_csv(simple_csv.encode(), source_name="simple.csv", db_path=db_path)["analysis_id"]
+    analysis = db.get_analysis(db_path, analysis_id)
+    db.save_brief(db_path, analysis_id, generate_brief(analysis))
+    db.get_latest_brief(db_path, analysis_id)
+    db.get_latest_brief_record(db_path, analysis_id)
+    db.list_analyses(db_path)
+    db.log_event(db_path, analysis_id, "test_event", {})
+    assert db.get_analysis(db_path, 999) is None  # Early-return path.
+
+    assert len(opened) >= 8
+    for conn in opened:
+        with pytest.raises(sqlite3.ProgrammingError):
+            conn.execute("SELECT 1")

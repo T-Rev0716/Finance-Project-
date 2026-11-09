@@ -203,29 +203,135 @@ any failure the command exits non-zero and the destination is unchanged.
 # Back up (from a Railway shell: `railway ssh`, or Settings → Shell):
 python /app/backend/scripts/backup_db.py backup --db /data/advisorlens.db \
   --out /data/backups/advisorlens-$(date +%Y%m%d-%H%M%S).db
-# Copy it off the volume as well, e.g. `railway ssh -- cat <file> > local.db`.
+# Copy it off the volume as well (paths are relative to the volume root; get the volume
+# ID from `railway volume list --json`), then compare `sha256sum` with the copy on the volume:
+railway volume files --volume <volume-id> download /backups/<file>.db ./<file>.db
 
 # Check any copy:
 python /app/backend/scripts/backup_db.py verify --db /data/backups/<file>.db
-
-# Restore: stop traffic first (Railway: remove the domain or scale the service to 0
-# replicas from a one-off shell), then, on the API's own host:
-python /app/backend/scripts/backup_db.py restore --db /data/advisorlens.db \
-  --from /data/backups/<file>.db
-# The current file is kept as advisorlens.db.pre-restore-<timestamp>. Restart the service,
-# sign in again and confirm the analyses list in the workspace.
 ```
 
+### Restore
+
+Replace the database only when nothing else can be using it. A paused, idle or unreachable
+API is not enough: `kill -STOP` freezes a process but leaves its connections and SQLite
+locks in place, an idle API opens a new connection with its next request, and routing the
+domain away stops new public requests without showing that requests already in progress, or
+callers on another route, have finished. Each step below ends the procedure if its check
+fails: put traffic back and stop rather than working around it.
+
+> **Railway: in-place restore is currently blocked.** Step 3 cannot be done on the Railway
+> service as deployed. Railway reaches a volume's files only through a running deployment
+> of the service it is attached to (`railway ssh`, SFTP/SCP, `railway volume files`); that
+> deployment's start command is the API (`backend/Dockerfile`), so stopping the API stops
+> the container and the shell with it; and a service with a volume cannot run a second
+> replica or deployment alongside it. There is no state in which the API has exited and the
+> database is still reachable. Do not restore the live Railway database in place until such
+> a maintenance state exists and has been rehearsed on a copy of the service. Candidates,
+> none built or tested: an API maintenance mode that answers 503 without opening the
+> database, a deployment whose start command does not run the API, or restoring onto a new
+> service and volume and switching over. Backups (above) and step 2 work on Railway today.
+
+Elsewhere the procedure needs a host where the API can be stopped while a shell in the same
+process namespace can still reach the database (for example a VM that runs the API under a
+service manager).
+
+1. **Check the backup you will restore from**, before touching traffic:
+
+   ```bash
+   python /app/backend/scripts/backup_db.py verify --db /data/backups/<restore-from>.db
+   ```
+
+2. **Block new requests** and keep the hostname that the frontend's `ADVISORLENS_BACKEND_URL`
+   points at. On Railway, route the domain to a port nothing listens on, then confirm there
+   is no other way in:
+
+   ```bash
+   railway domain list --service <service> --json      # note the domain id and targetPort
+   railway domain update <domain-id> --port 9 --service <service>
+   curl -s -o /dev/null -w '%{http_code}\n' https://<name>.up.railway.app/health   # expect 502
+   railway tcp-proxy list --service <service> --json   # expect no proxies
+   railway service list --json                         # expect no other service that could call it privately
+   ```
+
+   Elsewhere, take the API out of the load balancer or close its port the same way. A 502
+   shows that new public requests are refused, nothing more.
+
+3. **Let requests in progress finish, then stop the API.** Stop it with SIGTERM and enough
+   grace time, never SIGKILL or SIGSTOP: uvicorn then stops accepting connections, finishes
+   the requests in progress and exits. Make sure nothing restarts it. The maintenance state
+   is reached once the API process has exited. **On Railway, stop here** (see above) and put
+   the port back: `railway domain update <domain-id> --port <original-targetPort> --service <service>`.
+
+4. **Back up the current database outside the live path** now that nothing writes to it, and
+   keep a verified copy off the host. The `advisorlens.db.pre-restore-<timestamp>` file the
+   restore leaves next to the live one is not verified and does not count.
+
+   ```bash
+   python /app/backend/scripts/backup_db.py backup --db /data/advisorlens.db \
+     --out /data/backups/before-restore-$(date +%Y%m%d-%H%M%S).db
+   python /app/backend/scripts/backup_db.py verify --db /data/backups/before-restore-<timestamp>.db
+   sha256sum /data/backups/before-restore-<timestamp>.db
+   # Copy it off the host, check that the copy's sha256sum matches, then verify the copy:
+   python backend/scripts/backup_db.py verify --db ./before-restore-<timestamp>.db
+   ```
+
+5. **Confirm exclusive access and restore in one command**, so the restore runs only if the
+   check passes:
+
+   ```bash
+   python /app/backend/scripts/backup_db.py preflight --db /data/advisorlens.db && \
+   python /app/backend/scripts/backup_db.py restore --db /data/advisorlens.db \
+     --from /data/backups/<restore-from>.db
+   ```
+
+   `preflight` exits non-zero, and nothing is restored, if any process cannot be inspected
+   (including on a host without `/proc`), the API (`uvicorn`) is still running, any process
+   has `advisorlens.db` or its `-journal`, `-wal` or `-shm` file open, or SQLite's exclusive
+   lock is not free at once. It sees only its own PID namespace, so run it on the host where
+   the API ran and make sure no other host or container has the volume mounted. If it fails,
+   deal with the cause it names; never restore without it passing.
+
+6. **Start the API and check it with traffic still blocked.** Start it the way the host
+   normally does, confirm the running API process started after the restore finished, then
+   on the host:
+
+   ```bash
+   python /app/backend/scripts/backup_db.py verify --db /data/advisorlens.db   # counts as restore printed
+   python -c 'import urllib.request as u; print(u.urlopen("http://127.0.0.1:8000/health").read())'  # API port
+   ```
+
+   If a check fails, keep traffic blocked and go back to step 3, restoring the step 4 backup.
+
+7. **Let traffic back in** (on Railway, put the original `targetPort` back as in step 3), sign
+   in through the frontend and confirm the analyses list. If that fails, block traffic again
+   and go back to step 3.
+
 A restore records the restore time in the restored database, and the API then rejects
-every session issued before it. Run the restore on the API host, whose clock sets that
-cutoff. No secret rotation is needed for this; still rotate the session secret if you
-restored because of a suspected compromise.
+every session issued before it, so everyone signs in again. Run the restore on the API host,
+whose clock sets that cutoff. No secret rotation is needed for this; still rotate the session
+secret if you restored because of a suspected compromise.
 
 Covered by `backend/tests/test_backup.py` (round trip, previous file kept, no overwrite of
 existing backups, missing/empty/foreign/corrupt sources rejected with the destination
-unchanged, signed-out sessions not revived by a restore) and by the browser harness
-(back up, sign out, restore, then replay the signed-out cookie). Practice a restore before
-relying on it; a backup you have not restored is unproven.
+unchanged, signed-out sessions not revived by a restore; `preflight` refusing while the API
+runs, while a process holds the database or a journal file, when processes cannot be
+inspected and when the exclusive lock is taken) and by the browser harness (back up, sign
+out, restore, then replay the signed-out cookie). Practice a restore before relying on it; a
+backup you have not restored is unproven.
+
+#### Railway restore drill, 2026-11-08 (earlier procedure, superseded)
+
+A restore was rehearsed on the live demo (commit `cbe1767`) with the procedure this section
+replaces. The domain was routed to port 9 (`/health` returned 502), a backup was downloaded
+with `railway volume files download` and its hash checked, and the idle API turned out to
+still hold two to three handles on `/data/advisorlens.db` (a connection leak in `db.py`,
+since fixed). The API process was then frozen with `kill -STOP`, the restore was run, and
+the service was restarted and the port put back. The drill showed that the backup, download
+and traffic-routing commands work on Railway. It did not show that the restore was safe: the
+frozen process kept its connections and any locks, and the 502 did not prove that no request
+was still in progress. The procedure above has not been run on Railway, and it cannot be
+completed there until the blocker is resolved.
 
 ## Local development and tests
 

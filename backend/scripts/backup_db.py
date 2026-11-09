@@ -10,6 +10,11 @@
       than the live one, so everyone signs in again.
   verify  --db FILE
       Integrity and schema check plus row counts.
+  preflight --db /data/advisorlens.db
+      Exits non-zero unless nothing else can be using the database: every process
+      under /proc could be inspected, the API is not running, no process holds the
+      database or its journal files open, and SQLite's exclusive lock is free. Run it
+      in the same command as `restore` (`preflight ... && restore ...`).
 
 Sources are opened read-only and must already exist, so a mistyped path fails instead
 of creating an empty database. Nothing is written to a destination until the new
@@ -35,6 +40,7 @@ from app import db, security  # noqa: E402
 CORE_TABLES = ("analyses", "briefs", "audit_log")
 COUNTED_TABLES = ("analyses", "briefs", "finding_reviews", "households", "approved_reports", "audit_log")
 SIDECARS = ("-journal", "-wal", "-shm")
+API_MARKER = b"uvicorn"  # How backend/Dockerfile starts the API.
 
 
 class BackupError(Exception):
@@ -98,6 +104,60 @@ def backup(db_path: Path, out: Path) -> dict:
     return counts
 
 
+def preflight(db_path: Path, proc: Path = Path("/proc")) -> dict:
+    """Refuse unless nothing else can be using `db_path` right now.
+
+    A process that cannot be inspected is a failure, never "not in use". Only a process
+    that has already exited (its /proc entry is gone) is skipped. /proc shows this PID
+    namespace only, so run this where the API runs."""
+    if not db_path.is_file():
+        raise BackupError(f"Database file not found: {db_path}")
+    live = os.path.realpath(db_path)
+    watched = {live, *(live + s for s in SIDECARS)}
+    try:
+        pids = sorted(p for p in proc.iterdir() if p.name.isdigit())
+    except OSError as exc:
+        raise BackupError(f"Cannot inspect processes under {proc} ({exc}).") from exc
+    if str(os.getpid()) not in {p.name for p in pids}:
+        raise BackupError(f"Cannot inspect processes under {proc}: this process is not listed there.")
+    problems = []
+    for pid_dir in pids:
+        pid = pid_dir.name
+        if pid == str(os.getpid()):
+            continue
+        try:
+            argv = (pid_dir / "cmdline").read_bytes().split(b"\0")
+            fds = list((pid_dir / "fd").iterdir())
+        except FileNotFoundError:
+            if pid_dir.exists():
+                problems.append(f"cannot inspect process {pid}: its cmdline or fd list is missing")
+            continue  # Otherwise it exited while we looked.
+        except OSError as exc:
+            problems.append(f"cannot inspect process {pid} ({exc})")
+            continue
+        if any(API_MARKER in arg for arg in argv):
+            problems.append(f"the API is still running (process {pid}: {b' '.join(argv).decode(errors='replace').strip()})")
+        for fd in fds:
+            try:
+                target = os.readlink(fd).removesuffix(" (deleted)")
+            except FileNotFoundError:
+                continue  # Closed while we looked.
+            except OSError as exc:
+                problems.append(f"cannot inspect {fd} ({exc})")
+                continue
+            if target in watched:
+                problems.append(f"process {pid} has {target} open")
+    if problems:
+        raise BackupError("Database may still be in use: " + "; ".join(problems) + ".")
+    try:  # Fails at once if any other connection holds a lock, even one /proc cannot show.
+        with closing(sqlite3.connect(f"{Path(live).as_uri()}?mode=rw", uri=True, timeout=0, isolation_level=None)) as conn:
+            conn.execute("BEGIN EXCLUSIVE")
+            conn.execute("ROLLBACK")
+    except sqlite3.Error as exc:
+        raise BackupError(f"Could not get exclusive access to {db_path} ({exc}).") from exc
+    return {"processes_checked": len(pids) - 1}
+
+
 def restore(db_path: Path, source: Path) -> dict:
     if not db_path.parent.is_dir():
         raise BackupError(f"Directory not found: {db_path.parent}")
@@ -140,12 +200,16 @@ def main(argv=None) -> int:
     r.add_argument("--from", dest="source", type=Path, required=True)
     v = sub.add_parser("verify")
     v.add_argument("--db", type=Path, required=True)
+    p = sub.add_parser("preflight")
+    p.add_argument("--db", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
         if args.command == "backup":
             counts = backup(args.db, args.out)
         elif args.command == "restore":
             counts = restore(args.db, args.source)
+        elif args.command == "preflight":
+            counts = preflight(args.db)
         else:
             counts = validate(args.db)
     except BackupError as exc:
